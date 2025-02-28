@@ -102,7 +102,7 @@ const Coaches = () => {
 
         if (error) {
           console.error('Error fetching trainers:', error);
-          throw error;
+     throw error;
         }
 
         console.log('Raw trainers data:', trainers);
