@@ -1,30 +1,38 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
+    "target": "ES2020",  // A TypeScript ES2020-as JavaScript verzióra fordít
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],  // Használható JavaScript API-k (ES2020 + böngésző API-k)
+    "module": "ESNext",  // A legújabb modulrendszert használja
+    "skipLibCheck": true,  // Gyorsabb fordítás, nem ellenőrzi a külső könyvtárakat
 
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "jsx": "react-jsx",
+    /* Modulkezelés */
+    "moduleResolution": "bundler",  // Optimalizált modulkezelés Vite-hoz
+    "allowImportingTsExtensions": true,  // Engedélyezi a .ts fájlok közvetlen importálását
+    "isolatedModules": true,  // Minden fájlt külön modulként kezel
+    "noEmit": true,  // Nem generál .js fájlokat, csak ellenőrzi a kódot
+    "jsx": "react-jsx",  // React JSX támogatás
 
-    /* Linting */
-    "strict": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": false,
+    /* Ellenőrzési szabályok */
+    "strict": false,  // Lazább TypeScript ellenőrzések
+    "noUnusedLocals": false,  // Nem figyelmeztet a nem használt változókra
+    "noUnusedParameters": false,  // Nem figyelmeztet a nem használt függvényparaméterekre
+    "noImplicitAny": false,  // Nem követeli meg a pontos típusdefiníciókat
+    "noFallthroughCasesInSwitch": false,  // Engedi a switch-case ágak átfutását
 
-    "baseUrl": ".",
+    /* Aliasok */
+    "baseUrl": ".",  // Az útvonalak alapja a projekt gyökérmappája
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"]  // Az `@` alias a `src` mappára mutat
     }
   },
-  "include": ["src"]
+  "include": ["src"]  // Csak a `src` mappa fájljait ellenőrzi
 }
+
+/* 
+Mit csinál ez a fájl?
+- ES2020 + DOM API-k támogatása
+- Vite-barát modulkezelés (bundler)
+- React JSX támogatás (jsx: react-jsx)
+- Lazább TypeScript ellenőrzések (strict: false)
+- Alias beállítás (@/ → ./src/)
+*/

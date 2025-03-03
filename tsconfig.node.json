@@ -1,22 +1,29 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2023"],
-    "module": "ESNext",
-    "skipLibCheck": true,
+    "target": "ES2022",  // Modern JavaScript verzió
+    "lib": ["ES2023"],  // ES2023 API-k támogatása
+    "module": "ESNext",  // Legújabb modulrendszer használata
+    "skipLibCheck": true,  // Gyorsabb fordítás a függőségek ellenőrzésének kihagyásával
 
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
+    "moduleResolution": "bundler",  // Modulkezelés Vite és más build eszközök számára
+    "allowImportingTsExtensions": true,  // Engedélyezi a .ts kiterjesztésű importokat
+    "isolatedModules": true,  // Minden fájl külön modulként kezelése
+    "moduleDetection": "force",  // Modulok automatikus felismerése
+    "noEmit": true,  // Nem generál .js fájlokat, csak ellenőriz
 
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "strict": true,  // Szigorú TypeScript ellenőrzés
+    "noUnusedLocals": false,  // Nem figyelmeztet a nem használt változókra
+    "noUnusedParameters": false,  // Nem figyelmeztet a nem használt függvényparaméterekre
+    "noFallthroughCasesInSwitch": true  // Hibát ad, ha egy switch case break nélkül folytatódik
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts"]  // Csak a Vite konfigurációt ellenőrzi
 }
+
+/*
+Mit csinál ez a fájl?
+- TypeScript beállítása Vite számára, hogy csak a vite.config.ts fájlt ellenőrizze.
+- Modern JavaScript támogatás (ES2022, ESNext, ES2023 API-k).
+- Szigorúbb ellenőrzések a kódban (strict, noFallthroughCasesInSwitch).
+- Gyorsabb buildelés (skipLibCheck, noEmit), mivel Vite végzi a fordítást.
+- Jobb kompatibilitás a Vite és más modern build toolokkal (moduleResolution: bundler).
+*/

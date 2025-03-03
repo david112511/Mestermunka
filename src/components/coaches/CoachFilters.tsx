@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
+// Ezek az ikonok a szűrő szakaszok kinyitásához és bezárásához kellenek.
+
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+// Egy felugró ablak, amelyben a szűrési opciók megjelennek.
+
 import { Slider } from "@/components/ui/slider";
+// Csúszka (slider) elem, például az ár vagy értékelés kiválasztására.
+
 import { Checkbox } from "@/components/ui/checkbox";
+// Pipálható jelölőnégyzetek a többválasztós opciókhoz (pl. nyelvek, tanúsítványok.)
+
 import {
   Select,
   SelectContent,
@@ -20,20 +28,23 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+// Olyan részek, amelyeket ki lehet nyitni és bezárni (pl. szakterületek, végzettségek).
+
 import { FilterOptions } from '@/types/coach';
+// A `FilterOptions` interfész határozza meg, hogy milyen szűrők állnak rendelkezésre.
 
 interface CoachFiltersProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  filters: FilterOptions;
-  onFiltersChange: (filters: FilterOptions) => void;
-  options: {
-    specializations: string[];
-    languageOptions: string[];
-    experienceOptions: { value: string; label: string; }[];
-    certificationOptions: string[];
-    educationOptions: string[];
-    locationOptions: string[];
+  open: boolean;  // 🔹 A szűrőpanel nyitva van-e vagy sem
+  onOpenChange: (open: boolean) => void;  // 🔹 Funkció a panel bezárására/megnyitására
+  filters: FilterOptions;  // 🔹 Az aktuálisan alkalmazott szűrők
+  onFiltersChange: (filters: FilterOptions) => void;  // 🔹 A szűrők frissítésére szolgáló függvény
+  options: {  
+    specializations: string[];  // 🔹 Edzői szakterületek
+    languageOptions: string[];  // 🔹 Beszélt nyelvek
+    experienceOptions: { value: string; label: string; }[];  // 🔹 Tapasztalati szintek
+    certificationOptions: string[];  // 🔹 Tanúsítványok
+    educationOptions: string[];  // 🔹 Iskolai végzettségek
+    locationOptions: string[];  // 🔹 Városok / helyszínek
   };
 }
 

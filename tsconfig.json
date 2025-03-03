@@ -1,19 +1,30 @@
 {
-  "files": [],
+  "files": [],  // Külön fájlokat nem határoz meg, csak a "references" alapján dolgozik
+
   "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+    { "path": "./tsconfig.app.json" },  // A frontend TypeScript beállításait tartalmazza
+    { "path": "./tsconfig.node.json" }  // A backend (Node.js) TypeScript beállításait tartalmazza
   ],
+
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": ".",  // Az útvonalak alapja a projekt gyökérmappája
+
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"]  // Az `@` aliasként használható a `src` mappához
     },
-    "noImplicitAny": false,
-    "noUnusedParameters": false,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "noUnusedLocals": false,
-    "strictNullChecks": false
+
+    "noImplicitAny": false,  // Nem követeli meg, hogy minden változóhoz megadjuk a típust
+    "noUnusedParameters": false,  // Nem figyelmeztet a nem használt függvényparaméterekre
+    "skipLibCheck": true,  // Gyorsabb fordítás a függőségek ellenőrzésének kihagyásával
+    "allowJs": true,  // Engedélyezi a sima `.js` fájlok használatát TypeScript környezetben
+    "noUnusedLocals": false,  // Nem figyelmeztet a nem használt változókra
+    "strictNullChecks": false  // Nem szigorúan ellenőrzi a null és undefined értékeket
   }
 }
+
+/*Mit csinál ez a fájl?
+- Két külön TypeScript beállítást használ (tsconfig.app.json és tsconfig.node.json).
+- Alias beállítás (@/ → ./src/), hogy egyszerűbb legyen az importálás.
+- Lazább TypeScript ellenőrzés (noImplicitAny, strictNullChecks: false).
+- Gyorsabb fordítás (skipLibCheck, allowJs). 
+*/

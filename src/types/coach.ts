@@ -1,4 +1,6 @@
-
+// Ez határozza meg, hogy milyen adatokat kell tárolni egy edzőről.
+// Biztosítja, hogy minden edzőobjektum ugyanazokat az adatokat tartalmazza.
+// Segíti a kódellenőrzést, mert ha hiányzik egy adat, TypeScript hibát ad.
 export interface Coach {
   id: number;
   name: string;
@@ -22,6 +24,8 @@ export interface Coach {
   fullBio: string;
 }
 
+// Ez határozza meg, hogy a felhasználó milyen feltételek alapján szűrheti az edzőket.
+// Ha például valaki jógaoktatót keres Budapesten, aki angolul beszél és legalább 4.5 csillagos értékelése van, akkor ezt itt lehet megadni.
 export interface FilterOptions {
   priceRange: number[];
   specializations: string[];
@@ -33,3 +37,10 @@ export interface FilterOptions {
   education: string[];
   location: string[];
 }
+
+/* 
+Mi a szerepe?
+- Egységes formátumot ad az edzők adatainak.
+- Lehetővé teszi, hogy az edzőket különböző szempontok szerint szűrjük.
+- Megakadályozza a hibákat (pl. ha egy edzőnek nincs neve vagy hiányzik egy adat, TypeScript figyelmeztetést ad).
+*/
