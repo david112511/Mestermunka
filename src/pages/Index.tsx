@@ -79,11 +79,11 @@ const Index = () => {
             transition={{ duration: 0.6, delay: 0.4 }}
             className="mt-10 flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors" onClick={() => window.location.href="http://localhost:8080/community"}>
+            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors">
               Kezdj Bele
               <ArrowRight className="ml-2 h-5 w-5" />
             </button>
-            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-secondary text-gray-900 font-medium hover:bg-secondary/90 transition-colors" onClick={() => window.location.href="http://localhost:8080/coaches"}>
+            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-secondary text-gray-900 font-medium hover:bg-secondary/90 transition-colors">
               Találj Edzőt
             </button>
           </motion.div>
