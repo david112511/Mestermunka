@@ -71,7 +71,6 @@ export const TrainerRegistrationForm = () => {
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({});
-
   const [presetOptions, setPresetOptions] = useState<PresetOptions>({
     specializations: [],
     languages: [],
