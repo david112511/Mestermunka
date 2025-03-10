@@ -1,26 +1,26 @@
-// 🔹 Értesítések megjelenítésére szolgáló komponensek
+// Értesítések megjelenítésére szolgáló komponensek
 import { Toaster } from "@/components/ui/toaster";  
 import { Toaster as Sonner } from "@/components/ui/sonner";  
 
-// 🔹 Tooltip-ek (kis lebegő információs ablakok) működéséhez kell
+// Tooltip-ek (kis lebegő információs ablakok) működéséhez kell
 import { TooltipProvider } from "@/components/ui/tooltip";  
 
-// 🔹 Az adatok gyorsabb lekérdezéséhez használt eszköz (TanStack Query)
+// Az adatok gyorsabb lekérdezéséhez használt eszköz (TanStack Query)
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";  
 
-// 🔹 Az oldalak közötti navigációt biztosító eszköz (React Router)
+// Az oldalak közötti navigációt biztosító eszköz (React Router)
 import { BrowserRouter, Routes, Route } from "react-router-dom";  
 
-// 🔹 Az autentikációs (bejelentkezési) rendszer szolgáltatója
+// Az autentikációs (bejelentkezési) rendszer szolgáltatója
 import { AuthProvider } from "./contexts/AuthContext";  
 
-// 🔹 Az alkalmazás egyes oldalai
+// Az alkalmazás egyes oldalai
 import Index from "./pages/Index";  // Főoldal
 import NotFound from "./pages/NotFound";  // 404-es hibaoldal (ha az oldal nem található)
 import Coaches from "./pages/Coaches";  // Edzők listázása
 import Community from "./pages/Community";  // Közösségi oldal
 
-// 🔹 Létrehozza az adatlekérdezés kezelésére szolgáló klienst
+// Létrehozza az adatlekérdezés kezelésére szolgáló klienst
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -33,11 +33,11 @@ const App = () => (
       {/* 🔹 A tooltip-ek (lebegő információs ablakok) működését biztosítja */}
       <TooltipProvider>
       
-        {/* 🔹 Kétféle értesítéskezelő rendszer beállítása */}
+        {/* Kétféle értesítéskezelő rendszer beállítása */}
         <Toaster />  
         <Sonner />  
 
-        {/* 🔹 Az oldal navigációját kezeli */}
+        {/* Az oldal navigációját kezeli */}
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />  {/* 🔹 Főoldal */}
@@ -52,7 +52,7 @@ const App = () => (
   </QueryClientProvider>
 );
 
-export default App;  // 🔹 Az App komponenst elérhetővé teszi más fájlok számára
+export default App;  // Az App komponenst elérhetővé teszi más fájlok számára
 
 /* 
 Az oldal szerepe:

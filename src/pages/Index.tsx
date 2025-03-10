@@ -1,8 +1,11 @@
 import { motion } from "framer-motion";
 import { ArrowRight, Star, Users, Calendar, Utensils, ChevronRight, CheckCircle, Trophy, Users2, Target, Award, Clock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Navigation from "../components/Navigation";
 
 const Index = () => {
+  const navigate = useNavigate();
+
   const features = [
     {
       icon: <Users className="h-6 w-6" />,
@@ -48,11 +51,25 @@ const Index = () => {
     }
   ];
 
+  const handleRegister = () => {
+    console.log("Regisztráció kezdeményezése");
+    
+    const registerBtn = document.querySelector('button:has(.lucide-user-plus)') as HTMLButtonElement;
+    if (registerBtn) {
+      registerBtn.click();
+    } else {
+      console.log("Regisztrációs gomb nem található");
+    }
+  };
+
+  const handleFindCoach = () => {
+    navigate("/coaches");
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <Navigation />
       
-      {/* Hero Section */}
       <section className="pt-20 sm:pt-24 lg:pt-32 px-4">
         <div className="max-w-7xl mx-auto text-center">
           <motion.h1 
@@ -79,18 +96,23 @@ const Index = () => {
             transition={{ duration: 0.6, delay: 0.4 }}
             className="mt-10 flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors">
+            <button 
+              onClick={handleRegister}
+              className="inline-flex items-center px-6 py-3 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors"
+            >
               Kezdj Bele
               <ArrowRight className="ml-2 h-5 w-5" />
             </button>
-            <button className="inline-flex items-center px-6 py-3 rounded-lg bg-secondary text-gray-900 font-medium hover:bg-secondary/90 transition-colors">
+            <button 
+              onClick={handleFindCoach}
+              className="inline-flex items-center px-6 py-3 rounded-lg bg-secondary text-gray-900 font-medium hover:bg-secondary/90 transition-colors"
+            >
               Találj Edzőt
             </button>
           </motion.div>
         </div>
       </section>
 
-      {/* Features Section */}
       <section className="mt-32 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -117,7 +139,6 @@ const Index = () => {
         </div>
       </section>
 
-      {/* How It Works Section */}
       <section className="mt-32 px-4 bg-gray-50 py-20">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -155,7 +176,6 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Statistics Section */}
       <section className="mt-32 px-4 py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -186,12 +206,14 @@ const Index = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
       <section className="bg-primary text-white py-20 px-4">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-6">Készen Állsz a Kezdésre?</h2>
           <p className="text-xl mb-8 opacity-90">Csatlakozz azokhoz, akik már átalakították életüket szakértő edzőinkkel.</p>
-          <button className="inline-flex items-center px-8 py-4 rounded-lg bg-white text-primary font-medium hover:bg-gray-100 transition-colors">
+          <button 
+            onClick={handleRegister} 
+            className="inline-flex items-center px-8 py-4 rounded-lg bg-white text-primary font-medium hover:bg-gray-100 transition-colors"
+          >
             Kezdd El Most
             <ChevronRight className="ml-2 h-5 w-5" />
           </button>

@@ -249,6 +249,7 @@ export type Database = {
           full_bio: string | null
           id: string
           location: string | null
+          location_id: string | null
           price: string | null
           rating: number | null
           reviews: number | null
@@ -262,6 +263,7 @@ export type Database = {
           full_bio?: string | null
           id: string
           location?: string | null
+          location_id?: string | null
           price?: string | null
           rating?: number | null
           reviews?: number | null
@@ -275,6 +277,7 @@ export type Database = {
           full_bio?: string | null
           id?: string
           location?: string | null
+          location_id?: string | null
           price?: string | null
           rating?: number | null
           reviews?: number | null
@@ -286,6 +289,13 @@ export type Database = {
             columns: ["id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trainers_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]

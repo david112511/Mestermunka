@@ -1,3 +1,4 @@
+
 import { Star, MapPin, Mail, Phone, Globe2, Calendar, Clock, Trophy, Users, Award, X } from 'lucide-react';
 import {
   Dialog,
@@ -34,51 +35,63 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
               <div className="mt-2 flex items-center text-yellow-400">
                 <Star className="h-5 w-5 fill-current" />
                 <span className="ml-1 text-gray-900 font-medium">{coach.rating}</span>
-                <span className="ml-1 text-gray-500">({coach.reviews} reviews)</span>
+                <span className="ml-1 text-gray-500">({coach.reviews} értékelés)</span>
               </div>
               <div className="mt-2 flex items-center text-gray-600">
                 <MapPin className="h-4 w-4 mr-1" />
                 <span>{coach.location}</span>
               </div>
+              {coach.email && (
+                <div className="mt-2 flex items-center text-gray-600">
+                  <Mail className="h-4 w-4 mr-1" />
+                  <span>{coach.email}</span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="mt-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center text-gray-600">
-                <Mail className="h-4 w-4 mr-2" />
-                <span>{coach.email}</span>
-              </div>
-              <div className="flex items-center text-gray-600">
-                <Phone className="h-4 w-4 mr-2" />
-                <span>{coach.phone}</span>
-              </div>
-              <div className="flex items-center text-gray-600">
-                <Globe2 className="h-4 w-4 mr-2" />
-                <span>Languages: {coach.languages.join(", ")}</span>
-              </div>
+              {coach.email && (
+                <div className="flex items-center text-gray-600">
+                  <Mail className="h-4 w-4 mr-2" />
+                  <span>{coach.email}</span>
+                </div>
+              )}
+              {coach.phone && (
+                <div className="flex items-center text-gray-600">
+                  <Phone className="h-4 w-4 mr-2" />
+                  <span>{coach.phone}</span>
+                </div>
+              )}
+              {coach.languages && coach.languages.length > 0 && (
+                <div className="flex items-center text-gray-600">
+                  <Globe2 className="h-4 w-4 mr-2" />
+                  <span>Nyelvek: {coach.languages.join(", ")}</span>
+                </div>
+              )}
               <div className="flex items-center text-gray-600">
                 <Calendar className="h-4 w-4 mr-2" />
-                <span>Available: {coach.availability}</span>
+                <span>Elérhető: {coach.availability}</span>
               </div>
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-lg mb-2">About Me</h4>
+              <h4 className="font-semibold text-lg mb-2">Rólam</h4>
               <p className="text-gray-600 whitespace-pre-line">{coach.fullBio}</p>
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-lg mb-2">Education & Certifications</h4>
+              <h4 className="font-semibold text-lg mb-2">Képzettség & Tanúsítványok</h4>
               <div className="space-y-2">
-                {coach.education.map((edu: string, index: number) => (
+                {coach.education && coach.education.map((edu: string, index: number) => (
                   <div key={index} className="flex items-center text-gray-600">
                     <Award className="h-4 w-4 mr-2" />
                     <span>{edu}</span>
                   </div>
                 ))}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {coach.certifications.map((cert: string, index: number) => (
+                  {coach.certifications && coach.certifications.map((cert: string, index: number) => (
                     <span
                       key={index}
                       className="px-3 py-1 bg-primary/10 text-primary text-sm rounded-full"
@@ -91,9 +104,9 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-lg mb-2">Areas of Specialization</h4>
+              <h4 className="font-semibold text-lg mb-2">Szakterületek</h4>
               <div className="flex flex-wrap gap-2">
-                {coach.specializationAreas.map((area: string, index: number) => (
+                {coach.specializationAreas && coach.specializationAreas.map((area: string, index: number) => (
                   <span
                     key={index}
                     className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
@@ -105,30 +118,30 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-lg mb-2">Experience & Achievement</h4>
+              <h4 className="font-semibold text-lg mb-2">Tapasztalat & Eredmények</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-primary">{coach.experience}</p>
-                  <p className="text-sm text-gray-600">Experience</p>
+                  <p className="text-2xl font-bold text-primary">{coach.experience} év</p>
+                  <p className="text-sm text-gray-600">Tapasztalat</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <p className="text-2xl font-bold text-primary">{coach.activeClients}</p>
-                  <p className="text-sm text-gray-600">Active Clients</p>
+                  <p className="text-sm text-gray-600">Aktív ügyfelek</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <p className="text-2xl font-bold text-primary">{coach.successStories}</p>
-                  <p className="text-sm text-gray-600">Success Stories</p>
+                  <p className="text-sm text-gray-600">Sikertörténetek</p>
                 </div>
               </div>
             </div>
 
             <div className="border-t pt-4 flex justify-between items-center">
               <div>
-                <p className="text-gray-600">Hourly Rate</p>
-                <p className="text-3xl font-bold text-gray-900">${coach.price}</p>
+                <p className="text-gray-600">Óradíj</p>
+                <p className="text-3xl font-bold text-gray-900">{coach.price} Ft</p>
               </div>
               <button className="px-8 py-4 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors">
-                Schedule Session
+                Időpont foglalás
               </button>
             </div>
           </div>
