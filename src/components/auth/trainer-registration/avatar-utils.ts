@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase';
 import { ToastAction } from "@/components/ui/toast";
 import { toast as toastFunction } from "@/components/ui/use-toast";
+import { ensureAvatarsBucketExists } from '@/services/coachService';
 
 export const handleAvatarChange = (
   e: React.ChangeEvent<HTMLInputElement>,
@@ -42,26 +43,48 @@ export const handleAvatarChange = (
 export const uploadAvatar = async (userId: string, avatarFile: File | null): Promise<string | null> => {
   if (!avatarFile) return null;
 
-  const fileExt = avatarFile.name.split('.').pop();
-  const filePath = `${userId}/avatar.${fileExt}`;
-
+  console.log("Starting avatar upload for user:", userId);
+  
   try {
-    const { error: uploadError } = await supabase.storage
+    // First ensure the avatars bucket exists
+    await ensureAvatarsBucketExists();
+    
+    // Ensure the correct content type is set
+    const contentType = avatarFile.type;
+    
+    // Create a unique filename with timestamp to avoid cache issues
+    const timestamp = new Date().getTime();
+    const fileExt = avatarFile.name.split('.').pop();
+    const filePath = `${userId}/avatar-${timestamp}.${fileExt}`;
+    
+    console.log("Uploading to path:", filePath, "with content type:", contentType);
+
+    // Upload the avatar to Supabase Storage
+    const { data, error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(filePath, avatarFile, {
         cacheControl: '3600',
+        contentType: contentType,
         upsert: true
       });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error('Avatar upload error:', uploadError);
+      throw uploadError;
+    }
 
+    console.log("Upload successful, data:", data);
+
+    // Get the public URL for the uploaded avatar
     const { data: { publicUrl } } = supabase.storage
       .from('avatars')
       .getPublicUrl(filePath);
+      
+    console.log("Avatar upload successful, public URL:", publicUrl);
 
     return publicUrl;
   } catch (error) {
-    console.error('Hiba a profilkép feltöltése során:', error);
+    console.error('Error during avatar upload:', error);
     throw error;
   }
 };

@@ -6,9 +6,8 @@ import Navigation from '../components/Navigation';
 const Community = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'coaches'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [commentInputs, setCommentInputs] = useState({});
 
-  const [posts, setPosts] = useState([
+  const posts = [
     {
       id: 1,
       author: {
@@ -20,11 +19,9 @@ const Community = () => {
       content: "Most fejeztem be egy fantasztikus HIIT edzést a reggeli csoportommal! Íme egy gyors tipp: Mindig a helyes végrehajtásra koncentráljatok a sebesség helyett. A minőségi mozgás jobb eredményekhez vezet! 💪 #FitneszMotíváció #HIIT",
       image: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=600",
       likes: 128,
-      comments: [],
+      comments: 23,
       time: "2 órája",
       isCoach: true,
-      userLiked:false,
-      
     },
     {
       id: 2,
@@ -37,11 +34,9 @@ const Community = () => {
       content: "Új reggeli jóga gyakorlatsor! Tökéletes kezdőknek, akik szeretnék javítani hajlékonyságukat és energiával telve kezdeni a napot. Gyere el a következő órámra, hogy többet tanulj! 🧘‍♀️ #JógaÉlet #ReggelijóRutin",
       image: "https://images.unsplash.com/photo-1599447421416-3414500d18a5?w=600",
       likes: 245,
-      comments: [],
+      comments: 42,
       time: "5 órája",
       isCoach: true,
-      userLiked: true,
-      
     },
     {
       id: 3,
@@ -53,40 +48,15 @@ const Community = () => {
       },
       content: "Ma új személyes rekordot döntöttem! Nem sikerült volna az edzőm @KovácsJános fantasztikus támogatása nélkül. Ne feledjétek, a fejlődés időbe telik, de megéri minden lépést! 🎯 #FitneszCélok #Fejlődés",
       likes: 89,
-      comments: [],
+      comments: 15,
       time: "1 napja",
       isCoach: false,
-      userLiked: false,
-      
     },
-  ]);
+  ];
 
   const filteredPosts = activeTab === 'coaches' 
     ? posts.filter(post => post.isCoach)
     : posts;
-
-  const handleLike = (id) => {
-    setPosts(posts.map(post =>
-      post.id === id
-      ?{...post, likes: post.userLiked ? post.likes - 1 : post.likes = 1, userLiked: !post.userLiked}
-      :post
-    ));
-  };
-
-  const handleComment = (id, comment) =>{
-    if(!comment.trim()) return;
-    setPosts(posts.map(post =>
-      post.id === id
-      ?{...post,comments:[...post.comments, comment]} 
-      :post
-    ));
-  };
-
-  {/*const handleShare = (content) => {
-    navigator.clipboard.writeText(content); 
-    alert("A bejegyzés tartalma másolva lett, beilleszthető és megosztható!"); 
-  };*/}
-    
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -176,38 +146,17 @@ const Community = () => {
               {/* Bejegyzés Műveletek */}
               <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
                 <div className="flex items-center space-x-4">
-                  <button className="flex items-center text-gray-600 hover:text-primary transition-colors" onClick={() => handleLike(post.id)}>
-                    <Heart className={`h-5 w-5 mr-1 ${post.userLiked ? "text-red-500" : ""}`} />
+                  <button className="flex items-center text-gray-600 hover:text-primary transition-colors">
+                    <Heart className="h-5 w-5 mr-1" />
                     <span>{post.likes}</span>
                   </button>
                   <button className="flex items-center text-gray-600 hover:text-primary transition-colors">
                     <MessageCircle className="h-5 w-5 mr-1" />
                     <span>{post.comments}</span>
                   </button>
-                  <button className="flex items-center text-gray-600 hover:text-primary transition-colors"  >{/*onClick={() => handleShare(post.content)}*/}
+                  <button className="flex items-center text-gray-600 hover:text-primary transition-colors">
                     <Share2 className="h-5 w-5" />
                   </button>
-
-                  <div className="mt-2">
-                  {post.comments.map((comment, index) => (
-                  <p key={index} className="text-gray-700 bg-gray-100 p-2 rounded mt-1">
-                  {comment}
-                  </p>
-                  ))}
-                  </div>
-
-                  <div className='mt-4'>
-                    <input type="text" className='w-full p-2 border roundend' placeholder='Hagyj egy hozzászólást!' value={commentInputs[post.id || '']} onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})}
-                    onKeyDown={(e) =>{
-                      if(e.key==="Enter") {
-                        e.preventDefault();
-                        if(commentInputs[post.id].trim()){
-                          handleComment(post.id, commentInputs[post.id]);
-                      setCommentInputs({ ...commentInputs, [post.id]: '' });
-                        }
-                      }
-                    }}/>
-                  </div>
                 </div>
                 {post.isCoach && (
                   <button className="inline-flex items-center px-4 py-2 rounded-lg bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors">

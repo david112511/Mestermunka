@@ -53,6 +53,9 @@ const CoachCard = ({ coach, onSelect }: CoachCardProps) => {
   // Garantáljuk, hogy mindig legyen kép - véletlenszerű ha nincs megadva
   const imageUrl = coach.image || fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
 
+  // Log coach info for debugging
+  console.log('Coach data in CoachCard:', { name: coach.name, image: coach.image });
+
   return (
     <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow">
       <div className="p-6">

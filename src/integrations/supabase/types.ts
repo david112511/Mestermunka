@@ -24,6 +24,45 @@ export type Database = {
         }
         Relationships: []
       }
+      comments: {
+        Row: {
+          author_id: string
+          content: string
+          created_at: string | null
+          id: string
+          post_id: string
+        }
+        Insert: {
+          author_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          post_id: string
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       education_types: {
         Row: {
           id: string
@@ -54,6 +93,39 @@ export type Database = {
         }
         Relationships: []
       }
+      likes: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           id: string
@@ -68,6 +140,38 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      posts: {
+        Row: {
+          author_id: string
+          content: string
+          create_at: string | null
+          id: string
+          image: string | null
+        }
+        Insert: {
+          author_id: string
+          content: string
+          create_at?: string | null
+          id?: string
+          image?: string | null
+        }
+        Update: {
+          author_id?: string
+          content?: string
+          create_at?: string | null
+          id?: string
+          image?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -305,7 +409,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_profile_data: {
+        Args: {
+          user_id: string
+          first_name_val: string
+          last_name_val: string
+          phone_val: string
+          user_type_val: string
+          avatar_url_val: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       user_type: "trainer" | "user"

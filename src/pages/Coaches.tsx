@@ -9,15 +9,18 @@ import { Coach, FilterOptions } from '@/types/coach';
 import { useCoachData } from '@/hooks/useCoachData';
 import { useCoachFilters } from '@/hooks/useCoachFilters';
 import { useFilterOptions } from '@/hooks/useFilterOptions';
+import { ensureAvatarsBucketExists } from '@/services/coachService';
+import { useToast } from '@/hooks/use-toast';
 
 const Coaches = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState<Coach | null>(null);
+  const { toast } = useToast();
   
   // Initialize filter options
   const filterOptions = useFilterOptions();
   
-  // Fetch coach data
+  // Fetch coach data using our simplified hook
   const { coaches, loading, error, fetchCoaches } = useCoachData();
   
   // Initialize default filters
@@ -42,6 +45,19 @@ const Coaches = () => {
     filteredCoaches,
     resetFilters
   } = useCoachFilters(coaches, initialFilters);
+
+  // Ensure avatars bucket exists when component mounts
+  useState(() => {
+    ensureAvatarsBucketExists()
+      .catch(error => {
+        console.error("Failed to ensure avatars bucket exists:", error);
+        toast({
+          title: "Hiba történt",
+          description: "A profilképek tárolója nem jött létre megfelelően.",
+          variant: "destructive",
+        });
+      });
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -81,6 +97,12 @@ const Coaches = () => {
           coach={selectedCoach}
           onClose={() => setSelectedCoach(null)}
         />
+        
+        {coaches.length === 0 && !loading && !error && (
+          <div className="text-center mt-8">
+            <p className="text-gray-500 mb-4">Az adatbázisban még nincsenek edzők.</p>
+          </div>
+        )}
       </div>
     </div>
   );

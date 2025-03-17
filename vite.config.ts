@@ -10,7 +10,7 @@ export default defineConfig(() => ({
   // Fejlesztői szerver beállításai
   server: {
     host: "::",  // Engedélyezi a szerver futtatását minden elérhető hálózati interfészen.
-    port: 8080,  
+    port: 3000,  
   },
 
   // **Pluginok beállítása**
