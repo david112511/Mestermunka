@@ -10,6 +10,7 @@ import Coaches from "./pages/Coaches";
 import Community from "./pages/Community";
 import Meals from "./pages/Meals";
 import ResetPassword from "./pages/ResetPassword";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ function App() {
               <Route path="/community" element={<Community />} />
               <Route path="/meals" element={<Meals />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, User, UserPlus } from 'lucide-react';
@@ -19,6 +18,8 @@ import { RegisterForm } from './auth/RegisterForm';
 import { UserTypeSelection } from './auth/UserTypeSelection';
 import { TrainerRegistrationForm } from './auth/TrainerRegistrationForm';
 import { useToast } from './ui/use-toast';
+import { useProfile } from '@/hooks/useProfile';
+import { ProfileMenu } from './auth/ProfileMenu';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,6 +27,7 @@ const Navigation = () => {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registrationType, setRegistrationType] = useState<'selection' | 'user' | 'trainer'>('selection');
   const { user } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
   const { toast } = useToast();
 
   const navItems = [
@@ -87,10 +89,7 @@ const Navigation = () => {
               
               {user ? (
                 <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-700">{user.email}</span>
-                  <Button onClick={handleLogout} variant="outline">
-                    Kijelentkezés
-                  </Button>
+                  <ProfileMenu profile={profile} />
                 </div>
               ) : (
                 <div className="flex items-center space-x-4">
@@ -176,10 +175,7 @@ const Navigation = () => {
             ))}
             {user ? (
               <div className="px-3 py-2">
-                <span className="block text-sm text-gray-700 mb-2">{user.email}</span>
-                <Button onClick={handleLogout} variant="outline" className="w-full">
-                  Kijelentkezés
-                </Button>
+                <ProfileMenu profile={profile} />
               </div>
             ) : (
               <div className="px-3 py-2 space-y-2">
