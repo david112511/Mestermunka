@@ -73,32 +73,48 @@ const Community = () => {
       console.error('User not logged in');
       return;
     }
-
+  
     try {
-      const { data: existingLike } = await supabase
+      const { data: existingLike, error: selectError } = await supabase
         .from('likes')
         .select('*')
         .eq('post_id', id)
         .eq('user_id', currentUserId);
-
-      if (existingLike.length === 0) {
-        await supabase.from('likes').insert({ post_id: id, user_id: currentUserId });
-      } else {
-        await supabase.from('likes').delete().eq('post_id', id).eq('user_id', currentUserId);
+  
+      if (selectError) {
+        console.error('Error checking existing like:', selectError.message);
+        throw selectError;
       }
-
-      const { data: post } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name, avatar_url, user_type),
-          comments(*, author:profiles(id, first_name, last_name))
-        `)
-        .eq('id', id)
-        .single();
-
-      const { data: likes } = await supabase.from('likes').select('user_id').eq('post_id', id);
-      setPosts(posts.map(p => p.id === id ? { ...post, likes: likes.length, likedBy: likes.map(l => l.user_id) } : p));
+  
+      if (existingLike.length === 0) {
+        const { error: insertError } = await supabase
+          .from('likes')
+          .insert({ post_id: id, user_id: currentUserId });
+        if (insertError) {
+          console.error('Error inserting like:', insertError.message);
+          throw insertError;
+        }
+        setPosts(posts.map((p: any) =>
+          p.id === id
+            ? { ...p, likes: p.likes + 1, likedBy: [...p.likedBy, currentUserId] }
+            : p
+        ));
+      } else {
+        const { error: deleteError } = await supabase
+          .from('likes')
+          .delete()
+          .eq('post_id', id)
+          .eq('user_id', currentUserId);
+        if (deleteError) {
+          console.error('Error deleting like:', deleteError.message);
+          throw deleteError;
+        }
+        setPosts(posts.map((p: any) =>
+          p.id === id
+            ? { ...p, likes: p.likes - 1, likedBy: p.likedBy.filter((uid: string) => uid !== currentUserId) }
+            : p
+        ));
+      }
     } catch (error) {
       console.error('Error liking post:', error.message);
     }
