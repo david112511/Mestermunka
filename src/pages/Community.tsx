@@ -10,6 +10,8 @@ const Community = () => {
   const [posts, setPosts] = useState([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newPostContent, setNewPostContent] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // 获取当前用户 ID
   useEffect(() => {
@@ -35,7 +37,7 @@ const Community = () => {
           .select(`
             *,
             author:profiles(id, first_name, last_name, avatar_url, user_type),
-            comments(*, author:profiles(id, first_name, last_name))
+            comments(*, author:profiles(id, first_name, last_name), created_at)
           `)
           .order('create_at', { ascending: false });
 
@@ -120,6 +122,38 @@ const Community = () => {
     }
   };
 
+  // 删除帖子
+  const handleDeletePost = async (id: string) => {
+    if (!currentUserId) {
+      setDeleteError('Jelentkezz be a törléshez!');
+      return;
+    }
+
+    setDeleteError(null);
+    setDeleteLoading(id);
+    try {
+      await supabase.from('comments').delete().eq('post_id', id);
+      await supabase.from('likes').delete().eq('post_id', id);
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', id)
+        .eq('author_id', currentUserId);
+
+      if (error) {
+        console.error('Error deleting post:', error.message);
+        throw error;
+      }
+
+      setPosts(posts.filter((p: any) => p.id !== id));
+    } catch (error) {
+      setDeleteError('Hiba történt a bejegyzés törlése során. Kérjük, próbáld újra!');
+      console.error('Error deleting post:', error.message);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
   // 添加评论
   const handleComment = async (id: string) => {
     const comment = commentInputs[id];
@@ -140,7 +174,7 @@ const Community = () => {
         .select(`
           *,
           author:profiles(id, first_name, last_name, avatar_url, user_type),
-          comments(*, author:profiles(id, first_name, last_name))
+          comments(*, author:profiles(id, first_name, last_name), created_at)
         `)
         .eq('id', id)
         .single();
@@ -171,13 +205,12 @@ const Community = () => {
       if (error) throw error;
 
       console.log('New post inserted:', newPost);
-      // 刷新帖子列表
       const { data: posts, error: fetchError } = await supabase
         .from('posts')
         .select(`
           *,
           author:profiles(id, first_name, last_name, avatar_url, user_type),
-          comments(*, author:profiles(id, first_name, last_name))
+          comments(*, author:profiles(id, first_name, last_name), created_at)
         `)
         .order('create_at', { ascending: false });
 
@@ -282,9 +315,20 @@ const Community = () => {
                       </p>
                     </div>
                   </div>
-                  <button className="text-gray-400 hover:text-gray-500">
-                    <BookmarkPlus className="h-5 w-5" />
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {post.author_id === currentUserId && (
+                      <button
+                        className="text-red-500 hover:text-red-600 transition-colors"
+                        onClick={() => handleDeletePost(post.id)}
+                        disabled={deleteLoading === post.id}
+                      >
+                        {deleteLoading === post.id ? 'Törlés...' : 'Törlés'}
+                      </button>
+                    )}
+                    <button className="text-gray-400 hover:text-gray-500">
+                      <BookmarkPlus className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
 
                 <p className="mt-4 text-gray-700">{post.content}</p>
@@ -346,6 +390,10 @@ const Community = () => {
                     Hozzászólás
                   </button>
                 </div>
+
+                {deleteError && post.author_id === currentUserId && (
+                  <p className="text-red-500 mt-2">{deleteError}</p>
+                )}
               </div>
             ))
           ) : (
