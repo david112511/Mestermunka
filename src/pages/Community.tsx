@@ -12,6 +12,11 @@ const Community = () => {
   const [newPostContent, setNewPostContent] = useState('');
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // 新增状态：控制每个帖子的评论区显示/隐藏
+  const [openCommentSections, setOpenCommentSections] = useState<{ [key: string]: boolean }>({});
+  // 新增状态：控制评论加载状态和错误提示
+  const [commentLoading, setCommentLoading] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   // 获取当前用户 ID
   useEffect(() => {
@@ -158,18 +163,26 @@ const Community = () => {
   const handleComment = async (id: string) => {
     const comment = commentInputs[id];
     if (!comment || !comment.trim() || !currentUserId) {
+      setCommentError('Kérjük, írj egy hozzászólást, és jelentkezz be!');
       console.log('Cannot add comment:', { comment, currentUserId });
       return;
     }
 
+    setCommentError(null);
+    setCommentLoading(id);
     try {
-      const { data: newComment } = await supabase
+      const { data: newComment, error } = await supabase
         .from('comments')
         .insert({ post_id: id, author_id: currentUserId, content: comment })
         .select('*, author:profiles(id, first_name, last_name)')
         .single();
 
-      const { data: post } = await supabase
+      if (error) {
+        console.error('Error adding comment:', error.message);
+        throw error;
+      }
+
+      const { data: post, error: fetchError } = await supabase
         .from('posts')
         .select(`
           *,
@@ -179,11 +192,16 @@ const Community = () => {
         .eq('id', id)
         .single();
 
+      if (fetchError) throw fetchError;
+
       const { data: likes } = await supabase.from('likes').select('user_id').eq('post_id', id);
       setPosts(posts.map(p => p.id === id ? { ...post, likes: likes.length, likedBy: likes.map(l => l.user_id) } : p));
       setCommentInputs({ ...commentInputs, [id]: '' });
     } catch (error) {
+      setCommentError('Hiba történt a hozzászólás hozzáadása során. Kérjük, próbáld újra!');
       console.error('Error adding comment:', error.message);
+    } finally {
+      setCommentLoading(null);
     }
   };
 
@@ -228,6 +246,14 @@ const Community = () => {
     } catch (error) {
       console.error('Error adding post:', error.message);
     }
+  };
+
+  // 切换评论区显示/隐藏
+  const toggleCommentSection = (postId: string) => {
+    setOpenCommentSections(prev => ({
+      ...prev,
+      [postId]: !prev[postId],
+    }));
   };
 
   return (
@@ -345,7 +371,10 @@ const Community = () => {
                       <Heart className={`h-5 w-5 mr-1 ${post.likedBy.includes(currentUserId || '') ? 'text-red-500' : ''}`} />
                       <span>{post.likes}</span>
                     </button>
-                    <button className="flex items-center text-gray-600 hover:text-primary transition-colors">
+                    <button
+                      className="flex items-center text-gray-600 hover:text-primary transition-colors"
+                      onClick={() => toggleCommentSection(post.id)}
+                    >
                       <MessageCircle className="h-5 w-5 mr-1" />
                       <span>{post.comments.length}</span>
                     </button>
@@ -361,35 +390,74 @@ const Community = () => {
                   )}
                 </div>
 
-                <div className="mt-4">
-                  {post.comments.map((comment) => (
-                    <div key={comment.id} className="text-gray-700 bg-gray-100 p-2 rounded mt-1">
-                      <span className="font-semibold">
-                        {comment.author.first_name} {comment.author.last_name}: 
-                      </span>
-                      {comment.content}
-                    </div>
-                  ))}
-                </div>
+                {/* 评论区：通过点击评论图标显示/隐藏 */}
+                {openCommentSections[post.id] && (
+                  <div className="mt-4 bg-white rounded-xl shadow-sm p-4">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Hozzászólások</h4>
 
-                <div className="mt-4 flex gap-2">
-                  <input
-                    type="text"
-                    className="w-full p-2 border rounded"
-                    placeholder="Hagyj egy hozzászólást!"
-                    value={commentInputs[post.id] || ''}
-                    onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleComment(post.id);
-                      }
-                    }}
-                  />
-                  <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors" onClick={() => handleComment(post.id)}>
-                    Hozzászólás
-                  </button>
-                </div>
+                    {/* 评论列表：固定高度，超出滚动 */}
+                    <div className="max-h-60 overflow-y-auto space-y-3">
+                      {post.comments && post.comments.length > 0 ? (
+                        post.comments
+                          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) // 按时间降序排序
+                          .map((comment: any) => (
+                            <div
+                              key={comment.id}
+                              className="border-b border-gray-200 pb-3 last:border-b-0"
+                            >
+                              <div className="flex items-start">
+                                <div className="flex-1">
+                                  <div className="flex items-center">
+                                    <span className="font-semibold text-gray-800">
+                                      {comment.author?.first_name || 'Névtelen'} {comment.author?.last_name || ''}:
+                                    </span>
+                                    {comment.created_at && (
+                                      <span className="ml-2 text-xs text-gray-400">
+                                        {new Date(comment.created_at).toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-gray-700 mt-1">{comment.content}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                      ) : (
+                        <p className="text-gray-500 text-center py-4">Még nincs hozzászólás, legyél az első!</p>
+                      )}
+                    </div>
+
+                    {/* 添加评论 */}
+                    <div className="mt-4">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          className="flex-1 p-2 border border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Hagyj egy hozzászólást!"
+                          value={commentInputs[post.id] || ''}
+                          onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleComment(post.id);
+                            }
+                          }}
+                          disabled={commentLoading === post.id}
+                        />
+                        <button
+                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+                          onClick={() => handleComment(post.id)}
+                          disabled={commentLoading === post.id}
+                        >
+                          {commentLoading === post.id ? 'Küldés...' : 'Hozzászólás'}
+                        </button>
+                      </div>
+                      {commentError && (
+                        <p className="text-red-500 text-sm mt-2">{commentError}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {deleteError && post.author_id === currentUserId && (
                   <p className="text-red-500 mt-2">{deleteError}</p>
@@ -397,7 +465,7 @@ const Community = () => {
               </div>
             ))
           ) : (
-            <p className="text-center text-gray-500">Nincs megjeleníthető bejegyzés.</p>
+            <p className="text-center text-gray-500">Nincs megjeleníthető bejegyzés。</p>
           )}
         </div>
       </div>
