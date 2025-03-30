@@ -1,3 +1,35 @@
+import { 
+  User, 
+  Mail, 
+  Phone, 
+  Camera, 
+  Loader2, 
+  Save, 
+  Award, 
+  Scroll, 
+  Languages, 
+  GraduationCap, 
+  BookOpen, 
+  Briefcase, 
+  DollarSign, 
+  Clock, 
+  MapPin, 
+  Users, 
+  Trophy,
+  Plus,
+  X,
+  Settings,
+  Shield,
+  Lock,
+  BellRing,
+  Bell,
+  MessageSquare,
+  AlertTriangle,
+  Trash2,
+  Dumbbell,
+  CalendarCheck,
+  Calendar
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,24 +38,6 @@ import { useTrainerProfile } from '@/hooks/useTrainerProfile';
 import { useLocations } from '@/hooks/useLocations';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  BookOpen, 
-  Award, 
-  Scroll, 
-  Languages, 
-  GraduationCap, 
-  DollarSign, 
-  Clock, 
-  Users, 
-  Trophy,
-  Plus,
-  X
-} from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,13 +48,12 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Loader2, 
-  Camera, 
-  Briefcase, 
-  Save
-} from 'lucide-react';
 import Navigation from '@/components/Navigation';
+import Footer from '@/components/Footer';
+import { Switch } from '@/components/ui/switch';
+import AppointmentBooking from '@/components/AppointmentBooking';
+import AppointmentsList from '@/components/AppointmentsList';
+import TrainerAvailabilitySettings from '@/components/TrainerAvailabilitySettings';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -82,6 +95,7 @@ const Profile = () => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [passwordResetting, setPasswordResetting] = useState(false);
   const [savingTrainerData, setSavingTrainerData] = useState(false);
   const [availableSpecializations, setAvailableSpecializations] = useState<{id: string, name: string}[]>([]);
   const [availableCertifications, setAvailableCertifications] = useState<{id: string, name: string}[]>([]);
@@ -108,7 +122,7 @@ const Profile = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
-    if (tabParam && ['personal', 'account', 'trainer'].includes(tabParam)) {
+    if (tabParam && ['personal', 'account', 'trainer', 'appointments'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, []);
@@ -715,23 +729,420 @@ const Profile = () => {
       return 'U';
     }
   };
-  
-  if (profileLoading || trainerLoading || locationsLoading) {
+
+  // Handle password reset
+  const handlePasswordReset = async () => {
+    if (!user) return;
+    
+    try {
+      setPasswordResetting(true);
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email!, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Email elküldve",
+        description: "A jelszó visszaállításához szükséges email elküldve a megadott címre.",
+      });
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      toast({
+        title: "Hiba történt",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setPasswordResetting(false);
+    }
+  };
+
+  const [viewingOtherProfile, setViewingOtherProfile] = useState<boolean>(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
+  const [otherUserTrainerProfile, setOtherUserTrainerProfile] = useState<any>(null);
+  const [otherUserLoading, setOtherUserLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = url.searchParams.get('id');
+    
+    if (id && id !== user?.id) {
+      setViewingOtherProfile(true);
+      setProfileId(id);
+      fetchOtherUserProfile(id);
+    } else {
+      setViewingOtherProfile(false);
+      setProfileId(null);
+    }
+  }, [user]);
+
+  const fetchOtherUserProfile = async (id: string) => {
+    setOtherUserLoading(true);
+    try {
+      // Profil adatok lekérése
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+        
+      if (profileError) throw profileError;
+      setOtherUserProfile(profileData);
+      
+      // Edző profil adatok lekérése, ha van
+      const { data: trainerData, error: trainerError } = await supabase
+        .from('trainer_profiles')
+        .select(`
+          *,
+          specializations:trainer_specializations(
+            id,
+            specialization:specializations(id, name)
+          ),
+          certifications:trainer_certifications(
+            id,
+            certification:certifications(id, name)
+          ),
+          languages:trainer_languages(
+            id,
+            language:languages(id, name)
+          ),
+          education:trainer_education(
+            id,
+            education:education_types(id, name)
+          ),
+          location:locations(id, name)
+        `)
+        .eq('user_id', id)
+        .single();
+      
+      if (!trainerError) {
+        // Formázás a megfelelő struktúrára
+        const formattedTrainerProfile = {
+          ...trainerData,
+          specializations: trainerData.specializations.map((s: any) => ({
+            id: s.specialization.id,
+            name: s.specialization.name
+          })),
+          certifications: trainerData.certifications.map((c: any) => ({
+            id: c.certification.id,
+            name: c.certification.name
+          })),
+          languages: trainerData.languages.map((l: any) => ({
+            id: l.language.id,
+            name: l.language.name
+          })),
+          education: trainerData.education.map((e: any) => ({
+            id: e.education.id,
+            name: e.education.name
+          })),
+          location: trainerData.location?.[0]?.name || null
+        };
+        
+        setOtherUserTrainerProfile(formattedTrainerProfile);
+      }
+    } catch (error) {
+      console.error('Error fetching other user profile:', error);
+      toast({
+        title: "Hiba történt",
+        description: "Nem sikerült betölteni a felhasználó profilját.",
+        variant: "destructive",
+      });
+    } finally {
+      setOtherUserLoading(false);
+    }
+  };
+
+  if (profileLoading || trainerLoading || locationsLoading || (viewingOtherProfile && otherUserLoading)) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navigation />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
-          <div className="flex justify-center items-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2 text-lg text-gray-600">Betöltés...</span>
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <p className="text-lg text-gray-600">Profil betöltése...</p>
           </div>
         </div>
       </div>
     );
   }
-  
+
+  // Ha másik felhasználó profilját nézzük
+  if (viewingOtherProfile) {
+    const displayProfile = otherUserProfile;
+    const displayTrainerProfile = otherUserTrainerProfile;
+    const isTrainerProfile = !!displayTrainerProfile;
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="container mx-auto py-8 px-4">
+          <div className="mb-8">
+            <Button 
+              onClick={() => navigate(-1)} 
+              variant="outline" 
+              className="flex items-center text-gray-600 hover:text-primary"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+              Vissza
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Bal oldali profil kártya */}
+            <div className="lg:col-span-1">
+              <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="bg-gradient-to-r from-primary/80 to-primary h-32 relative"></div>
+                  <div className="px-6 pb-6 pt-16 relative">
+                    <div className="absolute -top-12 left-1/2 transform -translate-x-1/2">
+                      <Avatar className="h-24 w-24 border-4 border-white shadow-md">
+                        <AvatarImage src={displayProfile?.avatar_url || ''} alt={`${displayProfile?.first_name} ${displayProfile?.last_name}`} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xl">
+                          {displayProfile?.first_name?.[0]}{displayProfile?.last_name?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    
+                    <div className="text-center mb-4">
+                      <h2 className="text-2xl font-bold text-gray-800">
+                        {displayProfile?.first_name} {displayProfile?.last_name}
+                      </h2>
+                      {isTrainerProfile && (
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 mt-1">
+                          <Dumbbell className="h-3.5 w-3.5 mr-1" />
+                          Személyi edző
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {displayProfile?.bio && (
+                      <div className="mb-6">
+                        <p className="text-gray-600 text-sm leading-relaxed">{displayProfile.bio}</p>
+                      </div>
+                    )}
+                    
+                    {isTrainerProfile && (
+                      <div className="space-y-4 mb-6">
+                        <div className="flex items-start space-x-3">
+                          <Briefcase className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700">Tapasztalat</h4>
+                            <p className="text-sm text-gray-600">{displayTrainerProfile.experience || 'Nem megadott'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start space-x-3">
+                          <MapPin className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700">Helyszín</h4>
+                            <p className="text-sm text-gray-600">{displayTrainerProfile.location || 'Nem megadott'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start space-x-3">
+                          <DollarSign className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700">Ár</h4>
+                            <p className="text-sm text-gray-600">{displayTrainerProfile.price || 'Nem megadott'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start space-x-3">
+                          <Clock className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700">Elérhetőség</h4>
+                            <p className="text-sm text-gray-600">{displayTrainerProfile.availability || 'Nem megadott'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isTrainerProfile && (
+                      <div className="pt-4 border-t border-gray-100">
+                        <Button 
+                          className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2 transition-colors shadow-md"
+                          onClick={() => setActiveTab('appointments')}
+                        >
+                          <CalendarCheck className="mr-2 h-5 w-5" />
+                          Időpontfoglalás
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {isTrainerProfile && (
+                <>
+                  {/* Szakosodások */}
+                  {displayTrainerProfile.specializations && displayTrainerProfile.specializations.length > 0 && (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow mt-6">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center text-primary">
+                          <Award className="mr-2 h-5 w-5" />
+                          Szakterületek
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {displayTrainerProfile.specializations.map((spec: any) => (
+                            <Badge key={spec.id} variant="secondary" className="bg-primary/5 text-primary border-primary/10">
+                              {spec.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Képesítések */}
+                  {displayTrainerProfile.certifications && displayTrainerProfile.certifications.length > 0 && (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow mt-6">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center text-primary">
+                          <Scroll className="mr-2 h-5 w-5" />
+                          Képesítések
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {displayTrainerProfile.certifications.map((cert: any) => (
+                            <Badge key={cert.id} variant="secondary" className="bg-primary/5 text-primary border-primary/10">
+                              {cert.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Nyelvek */}
+                  {displayTrainerProfile.languages && displayTrainerProfile.languages.length > 0 && (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow mt-6">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center text-primary">
+                          <Languages className="mr-2 h-5 w-5" />
+                          Beszélt nyelvek
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {displayTrainerProfile.languages.map((lang: any) => (
+                            <Badge key={lang.id} variant="secondary" className="bg-primary/5 text-primary border-primary/10">
+                              {lang.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Végzettség */}
+                  {displayTrainerProfile.education && displayTrainerProfile.education.length > 0 && (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow mt-6">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center text-primary">
+                          <GraduationCap className="mr-2 h-5 w-5" />
+                          Végzettség
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {displayTrainerProfile.education.map((edu: any) => (
+                            <Badge key={edu.id} variant="secondary" className="bg-primary/5 text-primary border-primary/10">
+                              {edu.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Jobb oldali tartalom */}
+            <div className="lg:col-span-2">
+              <Tabs defaultValue="about" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-8">
+                  <TabsTrigger value="about" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Bemutatkozás
+                  </TabsTrigger>
+                  <TabsTrigger value="appointments" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+                    <CalendarCheck className="h-4 w-4 mr-2" />
+                    Időpontfoglalás
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="about">
+                  {isTrainerProfile && displayTrainerProfile.full_bio ? (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                      <CardHeader className="pb-3 border-b">
+                        <CardTitle className="text-xl text-primary">Részletes bemutatkozás</CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-5">
+                        <div className="prose max-w-none text-gray-700">
+                          {displayTrainerProfile.full_bio.split('\n').map((paragraph: string, i: number) => (
+                            <p key={i} className="mb-4">{paragraph}</p>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <BookOpen className="h-12 w-12 text-gray-300 mb-4" />
+                          <h3 className="text-lg font-medium text-gray-500 mb-2">Nincs részletes bemutatkozás</h3>
+                          <p className="text-gray-400 text-center">Az edző még nem adott meg részletes bemutatkozást.</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="appointments">
+                  {isTrainerProfile ? (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                      <CardHeader className="pb-3 border-b">
+                        <CardTitle className="text-xl text-primary">Időpontfoglalás</CardTitle>
+                        <CardDescription>Foglalj időpontot az edzővel</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-5">
+                        <AppointmentBooking 
+                          trainerId={profileId!} 
+                          trainerName={`${displayProfile?.first_name} ${displayProfile?.last_name}`}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <Calendar className="h-12 w-12 text-gray-300 mb-4" />
+                          <h3 className="text-lg font-medium text-gray-500 mb-2">Időpontfoglalás nem elérhető</h3>
+                          <p className="text-gray-400 text-center">Ez a felhasználó nem edző, így nem lehet időpontot foglalni vele.</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
@@ -740,537 +1151,721 @@ const Profile = () => {
           <p className="mt-2 text-lg text-gray-600">Kezeld személyes adataidat és beállításaidat</p>
         </div>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="personal" onClick={() => navigate('/profile?tab=personal', { replace: true })}>Személyes adatok</TabsTrigger>
-            <TabsTrigger value="account" onClick={() => navigate('/profile?tab=account', { replace: true })}>Fiók beállítások</TabsTrigger>
-            {isTrainer && <TabsTrigger value="trainer" onClick={() => navigate('/profile?tab=trainer', { replace: true })}>Edzői profil</TabsTrigger>}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid grid-cols-4 w-full max-w-3xl mx-auto mb-8 bg-white shadow-sm rounded-lg overflow-hidden">
+            <TabsTrigger value="personal" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+              <User className="h-4 w-4 mr-2" />
+              Profil
+            </TabsTrigger>
+            <TabsTrigger value="trainer" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Dumbbell className="h-4 w-4 mr-2" />
+              Edző profil
+            </TabsTrigger>
+            <TabsTrigger value="appointments" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+              <CalendarCheck className="h-4 w-4 mr-2" />
+              Foglalásaim
+            </TabsTrigger>
+            <TabsTrigger value="account" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Settings className="h-4 w-4 mr-2" />
+              Fiók
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="personal">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Profile Picture Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profilkép</CardTitle>
-                  <CardDescription>
-                    Válassz egy profilképet, amely megjelenik a profilodban
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center">
-                  <div className="relative mb-4">
-                    <Avatar className="h-32 w-32 border-4 border-white shadow-md">
-                      <AvatarImage src={avatarUrl || ''} alt={profile?.first_name || 'Felhasználó'} />
-                      <AvatarFallback className="bg-primary/10 text-primary text-2xl font-medium">
-                        {getInitials()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <label 
-                      htmlFor="avatar-upload" 
-                      className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
-                    >
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Camera className="h-4 w-4" />
-                      )}
-                    </label>
-                    <input
-                      id="avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={uploading}
-                    />
-                  </div>
-                  <p className="text-sm text-gray-500 text-center">
-                    Kattints a kamera ikonra a profilkép módosításához
-                  </p>
-                </CardContent>
-              </Card>
-              
-              {/* Personal Info Card */}
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle>Személyes adatok</CardTitle>
-                  <CardDescription>
-                    Frissítsd személyes adataidat
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="first_name">Keresztnév</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                          <Input
-                            id="first_name"
-                            name="first_name"
-                            value={formData.first_name}
-                            onChange={handleChange}
-                            className="pl-10"
-                            placeholder="Keresztnév"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="last_name">Vezetéknév</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                          <Input
-                            id="last_name"
-                            name="last_name"
-                            value={formData.last_name}
-                            onChange={handleChange}
-                            className="pl-10"
-                            placeholder="Vezetéknév"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email cím</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="email"
-                          value={user?.email || ''}
-                          className="pl-10"
-                          disabled
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Az email cím módosításához lépj kapcsolatba az ügyfélszolgálattal
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Telefonszám</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="phone"
-                          name="phone"
-                          value={formData.phone || ''}
-                          onChange={handleChange}
-                          className="pl-10"
-                          placeholder="+36 XX XXX XXXX"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="bio">Bemutatkozás</Label>
-                      <Textarea
-                        id="bio"
-                        name="bio"
-                        value={formData.bio || ''}
-                        onChange={handleChange}
-                        placeholder="Írj magadról néhány mondatot..."
-                        className="min-h-[100px]"
+            <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="bg-primary/5 border-b pb-4">
+                <CardTitle className="flex items-center text-primary">
+                  <User className="mr-2 h-5 w-5" />
+                  Személyes adatok
+                </CardTitle>
+                <CardDescription>
+                  Frissítsd személyes adataidat
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="flex flex-col md:flex-row gap-8">
+                  {/* Profile Picture */}
+                  <div className="flex flex-col items-center md:w-1/3">
+                    <div className="relative mb-4">
+                      <Avatar className="h-36 w-36 border-4 border-white shadow-lg">
+                        <AvatarImage src={avatarUrl || ''} alt={profile?.first_name || 'Felhasználó'} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-3xl font-medium">
+                          {getInitials()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <label 
+                        htmlFor="avatar-upload" 
+                        className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full cursor-pointer hover:bg-primary/90 transition-colors shadow-md"
+                      >
+                        {uploading ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Camera className="h-5 w-5" />
+                        )}
+                      </label>
+                      <input
+                        id="avatar-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                        disabled={uploading}
                       />
                     </div>
-                    
-                    <Button type="submit" className="w-full" disabled={saving}>
-                      {saving ? (
+                    <p className="text-sm text-gray-500 text-center mt-2">
+                      Kattints a kamera ikonra a profilkép módosításához
+                    </p>
+                  </div>
+                  
+                  {/* Personal Info Form */}
+                  <div className="md:w-2/3">
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                          <Label htmlFor="first_name" className="text-sm font-medium">Keresztnév</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                            <Input
+                              id="first_name"
+                              name="first_name"
+                              value={formData.first_name}
+                              onChange={handleChange}
+                              className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                              placeholder="Keresztnév"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="last_name" className="text-sm font-medium">Vezetéknév</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                            <Input
+                              id="last_name"
+                              name="last_name"
+                              value={formData.last_name}
+                              onChange={handleChange}
+                              className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                              placeholder="Vezetéknév"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="email" className="text-sm font-medium">Email cím</Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="email"
+                            value={user?.email || ''}
+                            className="pl-10 pr-3 py-2 bg-gray-100 border-gray-200 text-gray-500"
+                            disabled
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 italic">
+                          Az email cím módosításához lépj kapcsolatba az ügyfélszolgálattal
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="phone" className="text-sm font-medium">Telefonszám</Label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="phone"
+                            name="phone"
+                            value={formData.phone || ''}
+                            onChange={handleChange}
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                            placeholder="+36 XX XXX XXXX"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="bio" className="text-sm font-medium">Bemutatkozás</Label>
+                        <Textarea
+                          id="bio"
+                          name="bio"
+                          value={formData.bio || ''}
+                          onChange={handleChange}
+                          placeholder="Írj magadról néhány mondatot..."
+                          className="min-h-[120px] bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20 resize-none"
+                        />
+                      </div>
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2 transition-colors shadow-md"
+                        disabled={saving}
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Mentés folyamatban...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-5 w-5" />
+                            Adatok mentése
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="account">
+            <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="bg-primary/5 border-b pb-4">
+                <CardTitle className="flex items-center text-primary">
+                  <Settings className="mr-2 h-5 w-5" />
+                  Fiók beállítások
+                </CardTitle>
+                <CardDescription>
+                  Kezeld fiókod beállításait és biztonsági opcióit
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-6">
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <h3 className="text-lg font-medium mb-2 flex items-center">
+                      <Shield className="mr-2 h-5 w-5 text-primary" />
+                      Jelszó módosítása
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      Rendszeresen változtasd meg jelszavad a biztonság érdekében
+                    </p>
+                    <Button 
+                      className="bg-primary hover:bg-primary/90 text-white font-medium transition-colors shadow-sm"
+                      onClick={handlePasswordReset}
+                      disabled={passwordResetting}
+                    >
+                      {passwordResetting ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Mentés...
+                          Jelszó visszaállítása folyamatban...
                         </>
                       ) : (
                         <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Mentés
+                          <Lock className="mr-2 h-4 w-4" />
+                          Jelszó visszaállítása
                         </>
                       )}
                     </Button>
+                  </div>
+                  
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <h3 className="text-lg font-medium mb-2 flex items-center">
+                      <BellRing className="mr-2 h-5 w-5 text-primary" />
+                      Értesítési beállítások
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      Állítsd be, hogy milyen értesítéseket szeretnél kapni
+                    </p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Mail className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm">Email értesítések</span>
+                        </div>
+                        <Switch />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <MessageSquare className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm">Üzenet értesítések</span>
+                        </div>
+                        <Switch />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Bell className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm">Rendszer értesítések</span>
+                        </div>
+                        <Switch />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <h3 className="text-lg font-medium mb-2 flex items-center text-red-500">
+                      <AlertTriangle className="mr-2 h-5 w-5" />
+                      Veszélyes zóna
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      Figyelem! Ezek a műveletek nem visszavonhatóak.
+                    </p>
+                    <Button variant="destructive" className="bg-red-500 hover:bg-red-600 text-white font-medium transition-colors shadow-sm">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Fiók törlése
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="trainer">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Column - Specializations and Qualifications */}
+              <Card className="lg:col-span-1 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-primary/5 border-b pb-4">
+                  <CardTitle className="flex items-center text-primary">
+                    <Award className="mr-2 h-5 w-5" />
+                    Szakmai adatok
+                  </CardTitle>
+                  <CardDescription>
+                    Szakterületek és képesítések
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 pt-6">
+                  {/* Specializations */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center text-sm font-medium text-gray-700">
+                      <Award className="mr-2 h-4 w-4 text-primary" />
+                      Szakterületek
+                    </Label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Select 
+                        value={selectedSpecialization} 
+                        onValueChange={handleAddSpecialization}
+                        disabled={isAddingSpecialization}
+                      >
+                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md p-2 focus:ring-2 focus:ring-primary/20">
+                          {isAddingSpecialization ? (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Hozzáadás...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="Válassz szakterületet" />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-200 shadow-md w-[280px] mt-2">
+                          {availableSpecializations.map((spec) => (
+                            <SelectItem key={spec.id} value={spec.id} className="hover:bg-gray-100 py-2 px-4">{spec.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ScrollArea className="h-24 rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {trainerProfile?.specializations.map((spec) => (
+                          <Badge 
+                            key={spec.id} 
+                            variant="secondary" 
+                            className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6 bg-white border border-gray-200 shadow-sm"
+                            onClick={() => handleRemoveItem('specialization', spec.id)}
+                          >
+                            {spec.name}
+                            <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  
+                  {/* Certifications */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center text-sm font-medium text-gray-700">
+                      <Scroll className="mr-2 h-4 w-4 text-primary" />
+                      Képesítések
+                    </Label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Select 
+                        value={selectedCertification} 
+                        onValueChange={handleAddCertification}
+                        disabled={isAddingCertification || isLoadingCertifications}
+                      >
+                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md p-2 focus:ring-2 focus:ring-primary/20">
+                          {(isAddingCertification || isLoadingCertifications) ? (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Betöltés...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="Válassz képesítést" />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-200 shadow-md w-[280px] mt-2">
+                          {availableCertifications.map((cert) => (
+                            <SelectItem key={cert.id} value={cert.id} className="hover:bg-gray-100 py-2 px-4">{cert.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ScrollArea className="h-24 rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {trainerProfile?.certifications.map((cert) => (
+                          <Badge 
+                            key={cert.id} 
+                            variant="secondary" 
+                            className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6 bg-white border border-gray-200 shadow-sm"
+                            onClick={() => handleRemoveItem('certification', cert.id)}
+                          >
+                            {cert.name}
+                            <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  
+                  {/* Languages */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center text-sm font-medium text-gray-700">
+                      <Languages className="mr-2 h-4 w-4 text-primary" />
+                      Nyelvek
+                    </Label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Select 
+                        value={selectedLanguage} 
+                        onValueChange={handleAddLanguage}
+                        disabled={isAddingLanguage || isLoadingLanguages}
+                      >
+                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md pl-10 pr-3 py-2 focus:ring-2 focus:ring-primary/20">
+                          {(isAddingLanguage || isLoadingLanguages) ? (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Betöltés...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="Válassz nyelvet">
+                              {selectedLanguage ? 
+                                availableLanguages.find(lang => lang.id === selectedLanguage)?.name || "Válassz nyelvet" 
+                                : "Válassz nyelvet"}
+                            </SelectValue>
+                          )}
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-200 shadow-md w-full mt-2">
+                          {availableLanguages.map((lang) => (
+                            <SelectItem key={lang.id} value={lang.id} className="hover:bg-gray-100 py-2 px-4">{lang.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ScrollArea className="h-24 rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {trainerProfile?.languages.map((lang) => (
+                          <Badge 
+                            key={lang.id} 
+                            variant="secondary" 
+                            className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6 bg-white border border-gray-200 shadow-sm"
+                            onClick={() => handleRemoveItem('language', lang.id)}
+                          >
+                            {lang.name}
+                            <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  
+                  {/* Education */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center text-sm font-medium text-gray-700">
+                      <GraduationCap className="mr-2 h-4 w-4 text-primary" />
+                      Végzettség
+                    </Label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Select 
+                        value={selectedEducation} 
+                        onValueChange={handleAddEducation}
+                        disabled={isAddingEducation || isLoadingEducation}
+                      >
+                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md pl-10 pr-3 py-2 focus:ring-2 focus:ring-primary/20">
+                          {(isAddingEducation || isLoadingEducation) ? (
+                            <div className="flex items-center">
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              <span>Betöltés...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="Válassz végzettséget">
+                              {selectedEducation ? 
+                                availableEducation.find(edu => edu.id === selectedEducation)?.name || "Válassz végzettséget" 
+                                : "Válassz végzettséget"}
+                            </SelectValue>
+                          )}
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border border-gray-200 shadow-md w-full mt-2">
+                          {availableEducation.map((edu) => (
+                            <SelectItem key={edu.id} value={edu.id} className="hover:bg-gray-100 py-2 px-4">{edu.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ScrollArea className="h-24 rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {trainerProfile?.education.map((edu) => (
+                          <Badge 
+                            key={edu.id} 
+                            variant="secondary" 
+                            className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6 bg-white border border-gray-200 shadow-sm"
+                            onClick={() => handleRemoveItem('education', edu.id)}
+                          >
+                            {edu.name}
+                            <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
+                          </Badge>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {/* Right Column - Trainer Profile */}
+              <Card className="lg:col-span-2 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-primary/5 border-b pb-4">
+                  <CardTitle className="flex items-center text-primary">
+                    <Dumbbell className="mr-2 h-5 w-5" />
+                    Edzői profil
+                  </CardTitle>
+                  <CardDescription>
+                    Kezeld edzői profilod adatait
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <form onSubmit={handleTrainerSubmit} className="space-y-5">
+                    <div className="space-y-3">
+                      <Label htmlFor="description" className="text-sm font-medium">Rövid leírás</Label>
+                      <div className="relative">
+                        <BookOpen className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Textarea
+                          id="description"
+                          name="description"
+                          value={trainerFormData.description || ''}
+                          onChange={(e) => setTrainerFormData(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Írj röviden magadról..."
+                          className="min-h-[100px] pl-10 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20 resize-none"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Ez a rövid leírás jelenik meg a profilod kártyáján
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <Label htmlFor="full_bio" className="text-sm font-medium">Teljes leírás</Label>
+                      <div className="relative">
+                        <BookOpen className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                        <Textarea
+                          id="full_bio"
+                          name="full_bio"
+                          value={trainerFormData.full_bio || ''}
+                          onChange={(e) => setTrainerFormData(prev => ({ ...prev, full_bio: e.target.value }))}
+                          placeholder="Írj részletesen magadról..."
+                          className="min-h-[200px] pl-10 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20 resize-none"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        A teljes leírás a részletes profilodban jelenik meg
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="experience" className="text-sm font-medium">Tapasztalat</Label>
+                        <div className="relative">
+                          <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="experience"
+                            name="experience"
+                            value={trainerFormData.experience || ''}
+                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, experience: e.target.value }))}
+                            placeholder="pl. 5+ év"
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label htmlFor="price" className="text-sm font-medium">Ár</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="price"
+                            name="price"
+                            value={trainerFormData.price || ''}
+                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, price: e.target.value }))}
+                            placeholder="pl. 10000 Ft/óra"
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="availability" className="text-sm font-medium">Elérhetőség</Label>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="availability"
+                            name="availability"
+                            value={trainerFormData.availability || ''}
+                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, availability: e.target.value }))}
+                            placeholder="pl. H-P: 8-18"
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label htmlFor="location" className="text-sm font-medium">Helyszín</Label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Select value={selectedLocation} onValueChange={(value) => handleLocationChange(value)}>
+                            <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md pl-10 pr-3 py-2 focus:ring-2 focus:ring-primary/20">
+                              {updatingLocation ? (
+                                <div className="flex items-center">
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  <span>Frissítés...</span>
+                                </div>
+                              ) : (
+                                <SelectValue placeholder="Válassz helyszínt">
+                                  {selectedLocation ? 
+                                    locations.find(loc => loc.id === selectedLocation)?.name || "Válassz helyszínt" 
+                                    : "Válassz helyszínt"}
+                                </SelectValue>
+                              )}
+                            </SelectTrigger>
+                            <SelectContent className="bg-white border border-gray-200 shadow-md w-full mt-2">
+                              {locations.map((location) => (
+                                <SelectItem key={location.id} value={location.id} className="hover:bg-gray-100 py-2 px-4">{location.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-3">
+                        <Label htmlFor="active_clients" className="text-sm font-medium">Aktív kliensek</Label>
+                        <div className="relative">
+                          <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="active_clients"
+                            name="active_clients"
+                            type="number"
+                            value={trainerFormData.active_clients || 0}
+                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, active_clients: parseInt(e.target.value) || 0 }))}
+                            placeholder="pl. 15"
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label htmlFor="success_stories" className="text-sm font-medium">Sikertörténetek</Label>
+                        <div className="relative">
+                          <Trophy className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                          <Input
+                            id="success_stories"
+                            name="success_stories"
+                            type="number"
+                            value={trainerFormData.success_stories || 0}
+                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, success_stories: parseInt(e.target.value) || 0 }))}
+                            placeholder="pl. 25"
+                            className="pl-10 pr-3 py-2 bg-gray-50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4">
+                      <Button 
+                        type="submit" 
+                        className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2 transition-colors shadow-md"
+                        disabled={savingTrainerData}
+                      >
+                        {savingTrainerData ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Mentés folyamatban...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-5 w-5" />
+                            Edzői profil mentése
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </form>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
           
-          <TabsContent value="account">
-            <Card>
-              <CardHeader>
-                <CardTitle>Fiók beállítások</CardTitle>
-                <CardDescription>
-                  Kezeld fiókod beállításait és biztonsági opcióit
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">
-                  A fiók beállítások hamarosan elérhetőek lesznek...
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {isTrainer && (
-            <TabsContent value="trainer">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <Card className="md:col-span-1">
-                  <CardHeader>
-                    <CardTitle>Szakmai adatok</CardTitle>
+          <TabsContent value="appointments">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Bal oldal - Foglalásaim */}
+              <Card className="lg:col-span-2 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-primary/5 border-b pb-4">
+                  <CardTitle className="flex items-center text-primary">
+                    <CalendarCheck className="mr-2 h-5 w-5" />
+                    Foglalásaim
+                  </CardTitle>
+                  <CardDescription>
+                    Kezeld időpontfoglalásaidat
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <AppointmentsList />
+                </CardContent>
+              </Card>
+              
+              {/* Jobb oldal - Elérhetőség beállítása (csak edzőknek) */}
+              {isTrainer && (
+                <Card className="lg:col-span-1 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="bg-primary/5 border-b pb-4">
+                    <CardTitle className="flex items-center text-primary">
+                      <Clock className="mr-2 h-5 w-5" />
+                      Elérhetőség beállítása
+                    </CardTitle>
                     <CardDescription>
-                      Szakterületek és képesítések
+                      Állítsd be, mikor vagy elérhető
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label className="flex items-center">
-                        <Award className="mr-2 h-4 w-4 text-primary" />
-                        Szakterületek
-                      </Label>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Select 
-                          value={selectedSpecialization} 
-                          onValueChange={handleAddSpecialization}
-                          disabled={isAddingSpecialization}
-                        >
-                          <SelectTrigger className="w-[180px] bg-white border border-gray-200 rounded-md p-2">
-                            {isAddingSpecialization ? (
-                              <div className="flex items-center">
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                <span>Hozzáadás...</span>
-                              </div>
-                            ) : (
-                              <SelectValue placeholder="Válassz szakterületet" />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="bg-white border border-gray-200 shadow-md w-[180px] mt-2">
-                            {availableSpecializations.map((spec) => (
-                              <SelectItem key={spec.id} value={spec.id} className="hover:bg-gray-100 py-2 px-4">{spec.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <ScrollArea className="h-24 rounded-md border p-2">
-                        <div className="flex flex-wrap gap-2">
-                          {trainerProfile?.specializations.map((spec) => (
-                            <Badge 
-                              key={spec.id} 
-                              variant="secondary" 
-                              className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6"
-                              onClick={() => handleRemoveItem('specialization', spec.id)}
-                            >
-                              {spec.name}
-                              <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
-                            </Badge>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="flex items-center">
-                        <Scroll className="mr-2 h-4 w-4 text-primary" />
-                        Képesítések
-                      </Label>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Select 
-                          value={selectedCertification} 
-                          onValueChange={handleAddCertification}
-                          disabled={isAddingCertification || isLoadingCertifications}
-                        >
-                          <SelectTrigger className="w-[180px] bg-white border border-gray-200 rounded-md p-2">
-                            {(isAddingCertification || isLoadingCertifications) ? (
-                              <div className="flex items-center">
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                <span>Betöltés...</span>
-                              </div>
-                            ) : (
-                              <SelectValue placeholder="Válassz képesítést" />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="bg-white border border-gray-200 shadow-md w-[180px] mt-2">
-                            {availableCertifications.map((cert) => (
-                              <SelectItem key={cert.id} value={cert.id} className="hover:bg-gray-100 py-2 px-4">{cert.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <ScrollArea className="h-24 rounded-md border p-2">
-                        <div className="flex flex-wrap gap-2">
-                          {trainerProfile?.certifications.map((cert) => (
-                            <Badge 
-                              key={cert.id} 
-                              variant="secondary" 
-                              className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6"
-                              onClick={() => handleRemoveItem('certification', cert.id)}
-                            >
-                              {cert.name}
-                              <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
-                            </Badge>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="flex items-center">
-                        <Languages className="mr-2 h-4 w-4 text-primary" />
-                        Nyelvek
-                      </Label>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Select 
-                          value={selectedLanguage} 
-                          onValueChange={handleAddLanguage}
-                          disabled={isAddingLanguage || isLoadingLanguages}
-                        >
-                          <SelectTrigger className="w-[180px] bg-white border border-gray-200 rounded-md p-2">
-                            {(isAddingLanguage || isLoadingLanguages) ? (
-                              <div className="flex items-center">
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                <span>Betöltés...</span>
-                              </div>
-                            ) : (
-                              <SelectValue placeholder="Válassz nyelvet" />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="bg-white border border-gray-200 shadow-md w-[180px] mt-2">
-                            {availableLanguages.map((lang) => (
-                              <SelectItem key={lang.id} value={lang.id} className="hover:bg-gray-100 py-2 px-4">{lang.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <ScrollArea className="h-24 rounded-md border p-2">
-                        <div className="flex flex-wrap gap-2">
-                          {trainerProfile?.languages.map((lang) => (
-                            <Badge 
-                              key={lang.id} 
-                              variant="secondary" 
-                              className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6"
-                              onClick={() => handleRemoveItem('language', lang.id)}
-                            >
-                              {lang.name}
-                              <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
-                            </Badge>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="flex items-center">
-                        <GraduationCap className="mr-2 h-4 w-4 text-primary" />
-                        Végzettség
-                      </Label>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Select 
-                          value={selectedEducation} 
-                          onValueChange={handleAddEducation}
-                          disabled={isAddingEducation || isLoadingEducation}
-                        >
-                          <SelectTrigger className="w-[180px] bg-white border border-gray-200 rounded-md p-2">
-                            {(isAddingEducation || isLoadingEducation) ? (
-                              <div className="flex items-center">
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                <span>Betöltés...</span>
-                              </div>
-                            ) : (
-                              <SelectValue placeholder="Válassz végzettséget" />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="bg-white border border-gray-200 shadow-md w-[180px] mt-2">
-                            {availableEducation.map((edu) => (
-                              <SelectItem key={edu.id} value={edu.id} className="hover:bg-gray-100 py-2 px-4">{edu.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <ScrollArea className="h-24 rounded-md border p-2">
-                        <div className="flex flex-wrap gap-2">
-                          {trainerProfile?.education.map((edu) => (
-                            <Badge 
-                              key={edu.id} 
-                              variant="secondary" 
-                              className="text-xs group relative hover:bg-red-500 hover:text-white transition-colors cursor-pointer pr-6"
-                              onClick={() => handleRemoveItem('education', edu.id)}
-                            >
-                              {edu.name}
-                              <X className="h-3 w-3 absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100" />
-                            </Badge>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
+                  <CardContent className="pt-6">
+                    <TrainerAvailabilitySettings />
                   </CardContent>
                 </Card>
-                
-                <Card className="md:col-span-2">
-                  <CardHeader>
-                    <CardTitle>Edzői profil</CardTitle>
+              )}
+              
+              {!isTrainer && (
+                <Card className="lg:col-span-1 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="bg-primary/5 border-b pb-4">
+                    <CardTitle className="flex items-center text-primary">
+                      <Dumbbell className="mr-2 h-5 w-5" />
+                      Edzők keresése
+                    </CardTitle>
                     <CardDescription>
-                      Kezeld edzői profilod adatait
+                      Találj személyi edzőt
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <form onSubmit={handleTrainerSubmit} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="description">Rövid leírás</Label>
-                        <div className="relative">
-                          <BookOpen className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                          <Textarea
-                            id="description"
-                            name="description"
-                            value={trainerFormData.description || ''}
-                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, description: e.target.value }))}
-                            placeholder="Írj röviden magadról..."
-                            className="min-h-[100px] pl-10"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="full_bio">Teljes leírás</Label>
-                        <div className="relative">
-                          <BookOpen className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                          <Textarea
-                            id="full_bio"
-                            name="full_bio"
-                            value={trainerFormData.full_bio || ''}
-                            onChange={(e) => setTrainerFormData(prev => ({ ...prev, full_bio: e.target.value }))}
-                            placeholder="Írj részletesen magadról..."
-                            className="min-h-[200px] pl-10"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="experience">Tapasztalat</Label>
-                          <div className="relative">
-                            <Briefcase className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="experience"
-                              name="experience"
-                              value={trainerFormData.experience || ''}
-                              onChange={(e) => setTrainerFormData(prev => ({ ...prev, experience: e.target.value }))}
-                              placeholder="pl. 5+ év"
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="price">Ár</Label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="price"
-                              name="price"
-                              value={trainerFormData.price || ''}
-                              onChange={(e) => setTrainerFormData(prev => ({ ...prev, price: e.target.value }))}
-                              placeholder="pl. 10000 Ft/óra"
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="availability">Elérhetőség</Label>
-                          <div className="relative">
-                            <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="availability"
-                              name="availability"
-                              value={trainerFormData.availability || ''}
-                              onChange={(e) => setTrainerFormData(prev => ({ ...prev, availability: e.target.value }))}
-                              placeholder="pl. H-P: 8-18"
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="location">Helyszín</Label>
-                          <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                            <Select value={selectedLocation} onValueChange={(value) => handleLocationChange(value)}>
-                              <SelectTrigger className="w-full bg-white border border-gray-200 rounded-md pl-10 pr-3 py-2">
-                                {updatingLocation ? (
-                                  <div className="flex items-center">
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    <span>Frissítés...</span>
-                                  </div>
-                                ) : (
-                                  <SelectValue placeholder="Válassz helyszínt">
-                                    {selectedLocation ? 
-                                      locations.find(loc => loc.id === selectedLocation)?.name || "Válassz helyszínt" 
-                                      : "Válassz helyszínt"}
-                                  </SelectValue>
-                                )}
-                              </SelectTrigger>
-                              <SelectContent className="bg-white border border-gray-200 shadow-md w-full mt-2">
-                                {locations.map((location) => (
-                                  <SelectItem key={location.id} value={location.id} className="hover:bg-gray-100 py-2 px-4">{location.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="active_clients">Aktív kliensek</Label>
-                          <div className="relative">
-                            <Users className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="active_clients"
-                              name="active_clients"
-                              type="number"
-                              value={trainerFormData.active_clients || 0}
-                              onChange={(e) => setTrainerFormData(prev => ({ ...prev, active_clients: parseInt(e.target.value) || 0 }))}
-                              placeholder="pl. 15"
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="success_stories">Sikertörténetek</Label>
-                          <div className="relative">
-                            <Award className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="success_stories"
-                              name="success_stories"
-                              type="number"
-                              value={trainerFormData.success_stories || 0}
-                              onChange={(e) => setTrainerFormData(prev => ({ ...prev, success_stories: parseInt(e.target.value) || 0 }))}
-                              placeholder="pl. 25"
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <Button type="submit" className="w-full" disabled={savingTrainerData}>
-                        {savingTrainerData ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Mentés...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="mr-2 h-4 w-4" />
-                            Mentés
-                          </>
-                        )}
+                  <CardContent className="pt-6">
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <Calendar className="h-12 w-12 text-primary/40 mb-4" />
+                      <h3 className="text-lg font-medium text-gray-700 mb-2">Találj személyi edzőt</h3>
+                      <p className="text-gray-500 mb-4">Böngéssz az elérhető edzők között és foglalj időpontot</p>
+                      <Button 
+                        onClick={() => navigate('/trainers')}
+                        className="bg-primary hover:bg-primary/90 text-white"
+                      >
+                        Edzők böngészése
                       </Button>
-                    </form>
+                    </div>
                   </CardContent>
                 </Card>
-              </div>
-            </TabsContent>
-          )}
+              )}
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
     </div>

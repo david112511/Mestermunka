@@ -33,6 +33,8 @@ const Navigation = () => {
   const navItems = [
     { name: 'Edzők', path: '/coaches' },
     { name: 'Közösség', path: '/community' },
+    { name: 'Naptár', path: '/calendar' },
+    { name: 'Üzenetek', path: '/messages' },
   ];
 
   const handleLogout = async () => {

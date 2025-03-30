@@ -75,7 +75,7 @@ const ResetPassword = () => {
       await supabase.auth.signOut();
       
       // Redirect to login page
-      navigate('/login');
+      navigate('/');
     } catch (error: any) {
       toast({
         title: "Hiba történt",

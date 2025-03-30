@@ -10,6 +10,7 @@ export interface UserProfile {
   user_type: string | null;
   phone: string | null;
   bio: string | null;
+  is_trainer: boolean;
 }
 
 export const useProfile = () => {
@@ -28,6 +29,7 @@ export const useProfile = () => {
 
       try {
         setLoading(true);
+        // Először lekérdezzük a profil adatokat
         const { data, error } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, avatar_url, user_type, phone, bio')
@@ -35,7 +37,20 @@ export const useProfile = () => {
           .single();
 
         if (error) throw error;
-        setProfile(data);
+
+        // Ellenőrizzük, hogy a felhasználó edző-e
+        const { data: trainerData, error: trainerError } = await supabase
+          .from('trainer_profiles')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+
+        if (data) {
+          setProfile({
+            ...data,
+            is_trainer: !trainerError && trainerData !== null
+          });
+        }
       } catch (err: any) {
         console.error('Error fetching profile:', err);
         setError(err.message);
