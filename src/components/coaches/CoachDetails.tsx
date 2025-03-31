@@ -1,5 +1,4 @@
-
-import { Star, MapPin, Mail, Phone, Globe2, Calendar, Clock, Trophy, Users, Award, X } from 'lucide-react';
+import { Star, MapPin, Mail, Phone, Globe2, Calendar, Clock, Trophy, Users, Award, X, MessageCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +6,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Coach } from '@/types/coach';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { useMessages } from '@/hooks/useMessages';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface CoachDetailsProps {
   coach: Coach | null;
@@ -14,7 +18,48 @@ interface CoachDetailsProps {
 }
 
 const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { createConversation, setCurrentConversation } = useMessages();
+  const { toast } = useToast();
+  
   if (!coach) return null;
+
+  const handleStartConversation = async () => {
+    if (!user) {
+      toast({
+        title: "Bejelentkezés szükséges",
+        description: "Üzenetküldéshez kérjük, jelentkezz be.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!coach.id) {
+      toast({
+        title: "Hiba történt",
+        description: "Az edző azonosítója hiányzik.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const conversationId = await createConversation(coach.id);
+      if (conversationId) {
+        onClose();
+        navigate('/messages');
+        setCurrentConversation(conversationId as string);
+      }
+    } catch (error) {
+      console.error("Hiba a beszélgetés létrehozásakor:", error);
+      toast({
+        title: "Hiba történt",
+        description: "Nem sikerült létrehozni a beszélgetést.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Dialog open={!!coach} onOpenChange={() => onClose()}>
@@ -145,6 +190,24 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
               </button>
             </div>
           </div>
+        </div>
+        
+        <div className="mt-6 flex justify-between">
+          <Button 
+            className="flex items-center gap-2" 
+            onClick={handleStartConversation}
+          >
+            <MessageCircle className="h-4 w-4" />
+            Üzenet küldése
+          </Button>
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={() => navigate('/calendar')}
+          >
+            <Calendar className="h-4 w-4" />
+            Időpontfoglalás
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

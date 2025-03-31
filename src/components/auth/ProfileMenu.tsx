@@ -7,7 +7,9 @@ import {
   Calendar, 
   Settings, 
   LogOut, 
-  ChevronDown 
+  ChevronDown,
+  Clock,
+  MessageCircle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -77,19 +79,33 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
             : 'Felhasználó'
           }
         </div>
-        <DropdownMenuItem className="px-0 py-0 focus:bg-transparent focus:text-inherit">
+        <DropdownMenuItem asChild>
           <Link to="/profile" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
             <User className="mr-2 h-4 w-4 text-primary" />
             <span>Profilom</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem className="px-0 py-0 focus:bg-transparent focus:text-inherit">
+        <DropdownMenuItem asChild>
           <Link to="/calendar" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
             <Calendar className="mr-2 h-4 w-4 text-primary" />
             <span>Naptáram</span>
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem className="px-0 py-0 focus:bg-transparent focus:text-inherit">
+        <DropdownMenuItem asChild>
+          <Link to="/messages" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+            <MessageCircle className="mr-2 h-4 w-4 text-primary" />
+            <span>Üzenetek</span>
+          </Link>
+        </DropdownMenuItem>
+        {profile?.is_trainer && (
+          <DropdownMenuItem asChild>
+            <Link to="/calendar?availability=true" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+              <Clock className="mr-2 h-4 w-4 text-primary" />
+              <span>Elérhetőségeim</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild>
           <Link to="/settings" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
             <Settings className="mr-2 h-4 w-4 text-primary" />
             <span>Beállítások</span>
