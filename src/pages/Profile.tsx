@@ -3,32 +3,33 @@ import {
   Mail, 
   Phone, 
   Camera, 
-  Loader2, 
+  Pencil, 
   Save, 
+  Dumbbell, 
   Award, 
-  Scroll, 
-  Languages, 
-  GraduationCap, 
-  BookOpen, 
-  Briefcase, 
-  DollarSign, 
-  Clock, 
   MapPin, 
   Users, 
-  Trophy,
-  Plus,
-  X,
-  Settings,
-  Shield,
-  Lock,
-  BellRing,
-  Bell,
-  MessageSquare,
-  AlertTriangle,
-  Trash2,
-  Dumbbell,
-  CalendarCheck,
-  Calendar
+  Trophy, 
+  BookOpen, 
+  Settings, 
+  Shield, 
+  Lock, 
+  BellRing, 
+  Bell, 
+  MessageSquare, 
+  AlertTriangle, 
+  Trash2, 
+  CalendarCheck, 
+  Clock, 
+  Calendar, 
+  Languages, 
+  Scroll, 
+  GraduationCap, 
+  X, 
+  Loader2,
+  Briefcase,
+  DollarSign,
+  Plus
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -53,7 +54,7 @@ import Footer from '@/components/Footer';
 import { Switch } from '@/components/ui/switch';
 import AppointmentBooking from '@/components/AppointmentBooking';
 import AppointmentsList from '@/components/AppointmentsList';
-import TrainerAvailabilitySettings from '@/components/TrainerAvailabilitySettings';
+import TrainerAvailabilitySettingsV2 from '@/components/TrainerAvailabilitySettingsV2';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -792,56 +793,80 @@ const Profile = () => {
       if (profileError) throw profileError;
       setOtherUserProfile(profileData);
       
-      // Edző profil adatok lekérése, ha van
-      const { data: trainerData, error: trainerError } = await supabase
-        .from('trainer_profiles')
-        .select(`
-          *,
-          specializations:trainer_specializations(
+      // Csak akkor próbáljuk lekérdezni az edző-specifikus adatokat, ha a felhasználó edző
+      if (profileData.user_type === 'trainer') {
+        // Edző-specifikus adatok lekérdezése
+        // Ezeket a táblákat külön kérdezzük le, hogy elkerüljük a trainer_profiles táblát
+        
+        // Specializációk lekérdezése
+        const { data: specializationsData, error: specializationsError } = await supabase
+          .from('trainer_specializations')
+          .select(`
             id,
             specialization:specializations(id, name)
-          ),
-          certifications:trainer_certifications(
+          `)
+          .eq('trainer_id', id);
+          
+        // Képesítések lekérdezése
+        const { data: certificationsData, error: certificationsError } = await supabase
+          .from('trainer_certifications')
+          .select(`
             id,
             certification:certifications(id, name)
-          ),
-          languages:trainer_languages(
+          `)
+          .eq('trainer_id', id);
+          
+        // Nyelvek lekérdezése
+        const { data: languagesData, error: languagesError } = await supabase
+          .from('trainer_languages')
+          .select(`
             id,
             language:languages(id, name)
-          ),
-          education:trainer_education(
+          `)
+          .eq('trainer_id', id);
+          
+        // Képzettség lekérdezése
+        const { data: educationData, error: educationError } = await supabase
+          .from('trainer_education')
+          .select(`
             id,
             education:education_types(id, name)
-          ),
-          location:locations(id, name)
-        `)
-        .eq('user_id', id)
-        .single();
-      
-      if (!trainerError) {
-        // Formázás a megfelelő struktúrára
-        const formattedTrainerProfile = {
-          ...trainerData,
-          specializations: trainerData.specializations.map((s: any) => ({
-            id: s.specialization.id,
-            name: s.specialization.name
-          })),
-          certifications: trainerData.certifications.map((c: any) => ({
-            id: c.certification.id,
-            name: c.certification.name
-          })),
-          languages: trainerData.languages.map((l: any) => ({
-            id: l.language.id,
-            name: l.language.name
-          })),
-          education: trainerData.education.map((e: any) => ({
-            id: e.education.id,
-            name: e.education.name
-          })),
-          location: trainerData.location?.[0]?.name || null
-        };
-        
-        setOtherUserTrainerProfile(formattedTrainerProfile);
+          `)
+          .eq('trainer_id', id);
+          
+        // Helyszín lekérdezése
+        const { data: locationData, error: locationError } = await supabase
+          .from('locations')
+          .select('id, name')
+          .eq('trainer_id', id)
+          .single();
+          
+        // Ha sikeresen lekérdeztük az adatokat, akkor formázzuk őket
+        if (!specializationsError || !certificationsError || !languagesError || !educationError) {
+          // Formázás a megfelelő struktúrára
+          const formattedTrainerProfile = {
+            user_id: id,
+            specializations: specializationsData ? specializationsData.map((s: any) => ({
+              id: s.specialization.id,
+              name: s.specialization.name
+            })) : [],
+            certifications: certificationsData ? certificationsData.map((c: any) => ({
+              id: c.certification.id,
+              name: c.certification.name
+            })) : [],
+            languages: languagesData ? languagesData.map((l: any) => ({
+              id: l.language.id,
+              name: l.language.name
+            })) : [],
+            education: educationData ? educationData.map((e: any) => ({
+              id: e.education.id,
+              name: e.education.name
+            })) : [],
+            location: !locationError ? locationData : null
+          };
+          
+          setOtherUserTrainerProfile(formattedTrainerProfile);
+        }
       }
     } catch (error) {
       console.error('Error fetching other user profile:', error);
@@ -1481,7 +1506,7 @@ const Profile = () => {
                         onValueChange={handleAddCertification}
                         disabled={isAddingCertification || isLoadingCertifications}
                       >
-                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md p-2 focus:ring-2 focus:ring-primary/20">
+                        <SelectTrigger className="w-full bg-gray-50 border-gray-200 rounded-md pl-10 pr-3 py-2 focus:ring-2 focus:ring-primary/20">
                           {(isAddingCertification || isLoadingCertifications) ? (
                             <div className="flex items-center">
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1491,7 +1516,7 @@ const Profile = () => {
                             <SelectValue placeholder="Válassz képesítést" />
                           )}
                         </SelectTrigger>
-                        <SelectContent className="bg-white border border-gray-200 shadow-md w-[280px] mt-2">
+                        <SelectContent className="bg-white border border-gray-200 shadow-md w-full mt-2">
                           {availableCertifications.map((cert) => (
                             <SelectItem key={cert.id} value={cert.id} className="hover:bg-gray-100 py-2 px-4">{cert.name}</SelectItem>
                           ))}
@@ -1833,7 +1858,7 @@ const Profile = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-6">
-                    <TrainerAvailabilitySettings />
+                    <TrainerAvailabilitySettingsV2 />
                   </CardContent>
                 </Card>
               )}

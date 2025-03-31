@@ -45,6 +45,7 @@ const Messages = () => {
     conversationsLoading, 
     sendMessage, 
     fetchMessages, 
+    markMessagesAsRead,
     setCurrentConversation 
   } = useMessages();
 
@@ -90,6 +91,41 @@ const Messages = () => {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  // Üzenetek lekérdezése, amikor a kiválasztott beszélgetés megváltozik
+  // Debounce mechanizmus a fetchMessages híváshoz
+  const [fetchTimeoutId, setFetchTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    if (currentConversation) {
+      // Töröljük az előző timeout-ot, ha van
+      if (fetchTimeoutId) {
+        clearTimeout(fetchTimeoutId);
+      }
+      
+      // Új timeout beállítása
+      const timeoutId = setTimeout(() => {
+        fetchMessages(currentConversation);
+        // NE hívjuk meg a markMessagesAsRead-et itt
+      }, 500); // 500ms késleltetés
+      
+      setFetchTimeoutId(timeoutId);
+    }
+    
+    return () => {
+      // Tisztítás, amikor a komponens unmountol vagy a függőségek változnak
+      if (fetchTimeoutId) {
+        clearTimeout(fetchTimeoutId);
+      }
+    };
+  }, [currentConversation]);
+
+  // Olvasottnak jelölés külön gombbal vagy eseménnyel
+  const handleMarkAsRead = () => {
+    if (currentConversation) {
+      markMessagesAsRead(currentConversation);
+    }
+  };
 
   // Beszélgetések szűrése a keresés alapján
   const filteredConversations = conversations.filter(conversation => {
@@ -365,6 +401,9 @@ const Messages = () => {
                   />
                   <Button type="submit" size="icon" disabled={!newMessage.trim()}>
                     <Send className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" size="icon" onClick={handleMarkAsRead}>
+                    <CheckCheck className="h-4 w-4" />
                   </Button>
                 </form>
               </>

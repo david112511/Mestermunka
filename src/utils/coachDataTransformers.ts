@@ -1,4 +1,3 @@
-
 import { Coach } from '@/types/coach';
 
 // Fallback images for missing profile pictures
@@ -57,12 +56,6 @@ export const transformTrainersToCoaches = (
   if (!trainersData || !Array.isArray(trainersData)) return [];
   
   return trainersData.map(trainer => {
-    // Log the entire trainer object for debugging
-    console.log('Processing trainer data:', {
-      id: trainer.id,
-      profileData: trainer.profileData
-    });
-    
     // Get profile information from the profileData property
     let firstName = '';
     let lastName = '';
@@ -73,14 +66,6 @@ export const transformTrainersToCoaches = (
       firstName = trainer.profileData.first_name || '';
       lastName = trainer.profileData.last_name || '';
       avatarUrl = trainer.profileData.avatar_url;
-      
-      console.log('Extracted profile data for trainer', trainer.id, ':', {
-        firstName,
-        lastName,
-        avatarUrl
-      });
-    } else {
-      console.log('No profile data found for trainer', trainer.id);
     }
     
     // Format name with fallback
@@ -124,12 +109,6 @@ export const transformTrainersToCoaches = (
       education: education,
       fullBio: trainer.full_bio || "Nincs megadott részletes leírás"
     };
-    
-    console.log('Transformed coach data:', { 
-      id: coach.id, 
-      name: coach.name, 
-      image: coach.image 
-    });
     
     return coach;
   });

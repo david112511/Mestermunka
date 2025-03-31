@@ -10,7 +10,7 @@ import Coaches from "./pages/Coaches";
 import Community from "./pages/Community";
 import ResetPassword from "./pages/ResetPassword";
 import Profile from "./pages/Profile";
-import CalendarWithAvailability from "./pages/CalendarWithAvailability";
+import Calendar from "./pages/Calendar";
 import Messages from "./pages/Messages";
 
 const queryClient = new QueryClient();
@@ -29,7 +29,7 @@ function App() {
               <Route path="/community" element={<Community />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/calendar" element={<CalendarWithAvailability />} />
+              <Route path="/calendar" element={<Calendar />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

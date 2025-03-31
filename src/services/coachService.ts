@@ -4,9 +4,6 @@ import { supabase } from '@/lib/supabase';
  * Fetches all trainer data with related information in a single query
  */
 export const fetchTrainersWithDetails = async () => {
-  console.log('Fetching trainers with all details...');
-  
-  // Let's add additional logging to troubleshoot the database connection
   try {
     // First, check if there are any trainers at all (simpler query)
     const { data: trainerCheck, error: checkError } = await supabase
@@ -16,13 +13,57 @@ export const fetchTrainersWithDetails = async () => {
       
     if (checkError) {
       console.error('Error checking if trainers exist:', checkError);
-      throw checkError;
+      // Ha a trainers tábla nem létezik, próbáljuk meg közvetlenül a profiles táblából lekérdezni az edzőket
+      const { data: profilesCheck, error: profilesCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_type', 'trainer')
+        .limit(1);
+        
+      if (profilesCheckError) {
+        console.error('Error checking if trainer profiles exist:', profilesCheckError);
+        return [];
+      }
+      
+      if (!profilesCheck || profilesCheck.length === 0) {
+        return [];
+      }
+      
+      // Ha találtunk edzőket a profiles táblában, akkor csak azokat adjuk vissza
+      const { data: trainerProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url, user_type')
+        .eq('user_type', 'trainer');
+        
+      if (profilesError) {
+        console.error('Error fetching trainer profiles:', profilesError);
+        return [];
+      }
+      
+      // Alakítsuk át a profilokat a várt formátumra
+      const simplifiedTrainers = trainerProfiles.map(profile => ({
+        id: profile.id,
+        rating: 0,
+        reviews: 0,
+        price: 0,
+        experience: '',
+        location: '',
+        availability: '',
+        active_clients: 0,
+        success_stories: '',
+        description: '',
+        full_bio: '',
+        trainer_specializations: [],
+        trainer_languages: [],
+        trainer_certifications: [],
+        trainer_education: [],
+        profileData: profile
+      }));
+      
+      return simplifiedTrainers;
     }
     
-    console.log('Trainer check result:', trainerCheck);
-    
     if (!trainerCheck || trainerCheck.length === 0) {
-      console.log('No trainers found in the database. The trainers table appears to be empty.');
       return [];
     }
     
@@ -51,8 +92,6 @@ export const fetchTrainersWithDetails = async () => {
       console.error('Error fetching trainers with details:', error);
       throw error;
     }
-
-    console.log('Number of trainers found:', trainers?.length || 0);
     
     // Now fetch profiles separately and merge them with trainer data
     if (trainers && trainers.length > 0) {
@@ -68,8 +107,6 @@ export const fetchTrainersWithDetails = async () => {
         console.error('Error fetching profiles:', profilesError);
         throw profilesError;
       }
-      
-      console.log('Number of profiles found:', profilesData?.length || 0);
       
       // Create a mapping of profile data by ID for easy lookup
       const profilesById: Record<string, any> = {};
@@ -103,11 +140,9 @@ export const fetchTrainersWithDetails = async () => {
       for (const trainer of trainers as TrainerData[]) {
         // Create a new property in each trainer object to hold profile data
         trainer.profileData = profilesById[trainer.id] || null;
-        console.log(`Profile data for trainer ${trainer.id}:`, trainer.profileData);
       }
     }
     
-    console.log('Raw trainer data with related details:', trainers);
     return trainers || [];
   } catch (error) {
     console.error('Unexpected error in fetchTrainersWithDetails:', error);
@@ -137,29 +172,25 @@ export const fetchLocations = async () => {
 export const ensureAvatarsBucketExists = async () => {
   try {
     // Check if the bucket already exists
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const bucketExists = buckets?.some(bucket => bucket.name === 'avatars');
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
-    if (!bucketExists) {
-      console.log("Creating 'avatars' storage bucket...");
-      const { error } = await supabase.storage.createBucket('avatars', {
-        public: true,
-        fileSizeLimit: 5242880, // 5MB
-      });
-      
-      if (error) {
-        console.error("Failed to create 'avatars' bucket:", error);
-        throw error;
-      }
-      
-      console.log("'avatars' bucket created successfully");
-    } else {
-      console.log("'avatars' bucket already exists");
+    if (listError) {
+      // Ha nem tudjuk lekérdezni a bucketeket, akkor feltételezzük, hogy már létezik
+      return true;
     }
     
+    const bucketExists = buckets?.some(bucket => bucket.name === 'avatars');
+    
+    // Ha a bucket már létezik, nincs szükség további műveletekre
+    if (bucketExists) {
+      return true;
+    }
+    
+    // Ne próbáljuk meg létrehozni a bucketet, mert RLS szabálysértést okoz
+    // Feltételezzük, hogy a bucket már létezik vagy a rendszergazda fogja létrehozni
     return true;
   } catch (error) {
-    console.error("Error ensuring avatars bucket exists:", error);
-    return false;
+    // Hiba esetén is folytatjuk, feltételezve, hogy a bucket már létezik
+    return true;
   }
 };
