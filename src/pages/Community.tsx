@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
+import { set } from 'date-fns';
 
 const Community = () => {
   const [activeTab, setActiveTab] = useState('all');
@@ -12,11 +13,11 @@ const Community = () => {
   const [newPostContent, setNewPostContent] = useState('');
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // 新增状态：控制每个帖子的评论区显示/隐藏
   const [openCommentSections, setOpenCommentSections] = useState<{ [key: string]: boolean }>({});
-  // 新增状态：控制评论加载状态和错误提示
   const [commentLoading, setCommentLoading] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [followLoading, setFollowLoading] = useState<string | null>(null);
+  const [newPostMedia, setNewPostMedia] = useState<File | null>(null);
 
   // 获取当前用户 ID
   useEffect(() => {
@@ -33,7 +34,7 @@ const Community = () => {
     fetchUser();
   }, []);
 
-  // 获取帖子
+  // 获取帖子和关注状态
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -42,32 +43,46 @@ const Community = () => {
           .select(`
             *,
             author:profiles(id, first_name, last_name, avatar_url, user_type),
-            comments(*, author:profiles(id, first_name, last_name), created_at)
+            comments(*, author:profiles(id, first_name, last_name), created_at),
+            media_url
           `)
           .order('create_at', { ascending: false });
-
+  
         if (error) {
           console.error('Error fetching posts details:', error);
           throw error;
         }
-
+  
         const { data: likes, error: likesError } = await supabase.from('likes').select('post_id, user_id');
         if (likesError) throw likesError;
-
-        const postsWithLikes = posts.map(post => ({
+  
+        let follows: { follower_id: string; followed_id: string }[] = [];
+        if (currentUserId) {
+          const { data: followsData, error: followsError } = await supabase
+            .from('follows')
+            .select('follower_id, followed_id')
+            .eq('follower_id', currentUserId);
+          if (followsError) throw followsError;
+          follows = followsData || [];
+        }
+  
+        const postsWithLikesAndFollows = posts.map(post => ({
           ...post,
           likes: likes.filter(like => like.post_id === post.id).length,
           likedBy: likes.filter(like => like.post_id === post.id).map(like => like.user_id),
+          isFollowed: currentUserId
+            ? follows.some(follow => follow.followed_id === post.author_id)
+            : false,
         }));
-
-        setPosts(postsWithLikes);
-        console.log('Loaded posts:', postsWithLikes);
+  
+        setPosts(postsWithLikesAndFollows);
+        console.log('Loaded posts:', postsWithLikesAndFollows);
       } catch (error) {
         console.error('Error fetching posts:', error.message);
       }
     };
     fetchPosts();
-  }, []);
+  }, [currentUserId]); // 依赖 currentUserId，确保用户登录状态变化时重新加载
 
   const filteredPosts = activeTab === 'all'
     ? posts
@@ -211,38 +226,71 @@ const Community = () => {
       console.log('Cannot add post:', { newPostContent, currentUserId });
       return;
     }
-
-    console.log('Attempting to add post with user ID:', currentUserId);
+  
     try {
+      let mediaUrl = null;
+  
+      if (newPostMedia) {
+        const fileExt = newPostMedia.name.split('.').pop();
+        const fileName = `${currentUserId}-${new Date().getTime()}.${fileExt}`;
+        console.log('Uploading media:', { fileName, fileSize: newPostMedia.size });
+  
+        const { data, error: uploadError } = await supabase.storage
+          .from('post-media')
+          .upload(fileName, newPostMedia);
+  
+        if (uploadError) {
+          console.error('Error uploading media:', uploadError.message);
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+  
+        const { data: publicUrlData } = supabase.storage
+          .from('post-media')
+          .getPublicUrl(fileName);
+  
+        if (!publicUrlData) {
+          throw new Error('Failed to get public URL');
+        }
+  
+        mediaUrl = publicUrlData.publicUrl;
+        console.log('Media uploaded successfully:', mediaUrl);
+      }
+  
       const { data: newPost, error } = await supabase
         .from('posts')
-        .insert({ author_id: currentUserId, content: newPostContent, create_at: new Date().toISOString() })
-        .select('*, author:profiles(id, first_name, last_name, avatar_url, user_type)')
+        .insert({
+          author_id: currentUserId,
+          content: newPostContent,
+          create_at: new Date().toISOString(),
+          media_url: mediaUrl,
+        })
+        .select('*, author:profiles(id, first_name, last_name, avatar_url, user_type), media_url') // 明确包含 media_url
         .single();
-
-      if (error) throw error;
-
+  
+      if (error) {
+        console.error('Error inserting post:', error.message);
+        throw error;
+      }
+  
       console.log('New post inserted:', newPost);
-      const { data: posts, error: fetchError } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name, avatar_url, user_type),
-          comments(*, author:profiles(id, first_name, last_name), created_at)
-        `)
-        .order('create_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
-
+  
       const { data: likes } = await supabase.from('likes').select('post_id, user_id');
-      const postsWithLikes = posts.map(post => ({
-        ...post,
-        likes: likes.filter(like => like.post_id === post.id).length,
-        likedBy: likes.filter(like => like.post_id === post.id).map(like => like.user_id),
-      }));
-
-      setPosts(postsWithLikes);
+      const { data: follows } = await supabase
+        .from('follows')
+        .select('follower_id, followed_id')
+        .eq('follower_id', currentUserId);
+  
+      const newPostWithLikesAndFollows = {
+        ...newPost,
+        likes: 0,
+        likedBy: [],
+        isFollowed: follows.some(follow => follow.followed_id === newPost.author_id),
+        comments: [],
+      };
+  
+      setPosts([newPostWithLikesAndFollows, ...posts]);
       setNewPostContent('');
+      setNewPostMedia(null);
     } catch (error) {
       console.error('Error adding post:', error.message);
     }
@@ -254,6 +302,53 @@ const Community = () => {
       ...prev,
       [postId]: !prev[postId],
     }));
+  };
+
+  // 关注/取消关注处理
+  const handleFollow = async (postId: string, authorId: string, isFollowed: boolean) => {
+    if (!currentUserId) {
+      console.error('User not logged in');
+      return;
+    }
+
+    setFollowLoading(postId);
+    try {
+      if (isFollowed) {
+        // 取消关注
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', currentUserId)
+          .eq('followed_id', authorId);
+
+        if (error) {
+          console.error('Error unfollowing user:', error.message);
+          throw error;
+        }
+
+        setPosts(posts.map((p: any) =>
+          p.id === postId ? { ...p, isFollowed: false } : p
+        ));
+      } else {
+        // 关注
+        const { error } = await supabase
+          .from('follows')
+          .insert({ follower_id: currentUserId, followed_id: authorId });
+
+        if (error) {
+          console.error('Error following user:', error.message);
+          throw error;
+        }
+
+        setPosts(posts.map((p: any) =>
+          p.id === postId ? { ...p, isFollowed: true } : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error handling follow:', error.message);
+    } finally {
+      setFollowLoading(null);
+    }
   };
 
   return (
@@ -275,6 +370,15 @@ const Community = () => {
               value={newPostContent}
               onChange={(e) => setNewPostContent(e.target.value)}
               rows={3}
+            />
+            <input
+              type='file'
+              accept='image/*, video/*'
+              className='mt-2'
+              onChange={(e)=>{
+                const file = e.target.files?.[0];
+                if(file) setNewPostMedia(file);
+              }}
             />
             <button
               className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
@@ -320,11 +424,12 @@ const Community = () => {
               <div key={post.id} className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
+                    
                     <img
                       src={post.author.avatar_url || 'https://via.placeholder.com/150'}
                       alt={`${post.author.first_name} ${post.author.last_name}`}
                       className="w-12 h-12 rounded-full object-cover"
-                    />
+                    />                 
                     <div className="ml-4">
                       <div className="flex items-center">
                         <h3 className="font-semibold text-gray-900">
@@ -341,6 +446,7 @@ const Community = () => {
                       </p>
                     </div>
                   </div>
+                  
                   <div className="flex items-center space-x-2">
                     {post.author_id === currentUserId && (
                       <button
@@ -356,8 +462,24 @@ const Community = () => {
                     </button>
                   </div>
                 </div>
-
                 <p className="mt-4 text-gray-700">{post.content}</p>
+                  {post.media_url ? (
+                    post.media_url.includes('.mp4') || post.media_url.includes('.mov') ? (
+                      <video
+                        src={post.media_url}
+                        controls
+                        className="mt-4 rounded-lg w-full object-cover h-64"
+                        onError={() => console.log(`Failed to load video: ${post.media_url}`)}
+                      />
+                    ) : (
+                      <img
+                        src={post.media_url}
+                        alt="Bejegyzés képe"
+                        className="mt-4 rounded-lg w-full object-cover h-64"
+                        onError={() => console.log(`Failed to load image: ${post.media_url}`)}
+                      />
+                    )
+                  ) : null}
                 {post.image && (
                   <img src={post.image} alt="Bejegyzés képe" className="mt-4 rounded-lg w-full object-cover h-64" />
                 )}
@@ -382,10 +504,22 @@ const Community = () => {
                       <Share2 className="h-5 w-5" />
                     </button>
                   </div>
-                  {post.author.user_type === 'trainer' && (
-                    <button className="inline-flex items-center px-4 py-2 rounded-lg bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors">
+                  {post.author.user_type === 'trainer' && post.author_id !== currentUserId && (
+                    <button
+                      className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
+                        post.isFollowed
+                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          : 'bg-primary/10 text-primary hover:bg-primary/20'
+                      }`}
+                      onClick={() => handleFollow(post.id, post.author_id, post.isFollowed)}
+                      disabled={followLoading === post.id}
+                    >
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Követés
+                      {followLoading === post.id
+                        ? 'Feldolgozás...'
+                        : post.isFollowed
+                        ? 'Követed'
+                        : 'Követés'}
                     </button>
                   )}
                 </div>
@@ -399,7 +533,7 @@ const Community = () => {
                     <div className="max-h-60 overflow-y-auto space-y-3">
                       {post.comments && post.comments.length > 0 ? (
                         post.comments
-                          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) // 按时间降序排序
+                          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                           .map((comment: any) => (
                             <div
                               key={comment.id}
