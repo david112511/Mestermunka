@@ -228,16 +228,18 @@ const Community = () => {
     }
   
     try {
-      let mediaUrl = null;
+      let mediaUrl: string | null = null;
   
       if (newPostMedia) {
-        const fileExt = newPostMedia.name.split('.').pop();
-        const fileName = `${currentUserId}-${new Date().getTime()}.${fileExt}`;
-        console.log('Uploading media:', { fileName, fileSize: newPostMedia.size });
+        const originalFileName = newPostMedia.name; // 获取原始文件名
+        const fileExt = originalFileName.split('.').pop(); // 获取扩展名
+        const baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.')); // 获取文件名（不含扩展名）
+        const uniqueFileName = `${baseName}-${currentUserId}-${new Date().getTime()}.${fileExt}`; // 添加用户 ID 和时间戳
+        console.log('Uploading media:', { fileName: uniqueFileName, fileSize: newPostMedia.size });
   
         const { data, error: uploadError } = await supabase.storage
           .from('post-media')
-          .upload(fileName, newPostMedia);
+          .upload(uniqueFileName, newPostMedia);
   
         if (uploadError) {
           console.error('Error uploading media:', uploadError.message);
@@ -246,7 +248,7 @@ const Community = () => {
   
         const { data: publicUrlData } = supabase.storage
           .from('post-media')
-          .getPublicUrl(fileName);
+          .getPublicUrl(uniqueFileName);
   
         if (!publicUrlData) {
           throw new Error('Failed to get public URL');
@@ -264,7 +266,7 @@ const Community = () => {
           create_at: new Date().toISOString(),
           media_url: mediaUrl,
         })
-        .select('*, author:profiles(id, first_name, last_name, avatar_url, user_type), media_url') // 明确包含 media_url
+        .select('*, author:profiles(id, first_name, last_name, avatar_url, user_type), media_url')
         .single();
   
       if (error) {
@@ -280,19 +282,20 @@ const Community = () => {
         .select('follower_id, followed_id')
         .eq('follower_id', currentUserId);
   
-      const newPostWithLikesAndFollows = {
+      const newPostWithLikesAndFollows: Post = {
         ...newPost,
         likes: 0,
         likedBy: [],
-        isFollowed: follows.some(follow => follow.followed_id === newPost.author_id),
+        isFollowed: follows.some((follow) => follow.followed_id === newPost.author_id),
         comments: [],
       };
   
+      console.log('New post with likes and follows:', newPostWithLikesAndFollows);
       setPosts([newPostWithLikesAndFollows, ...posts]);
       setNewPostContent('');
       setNewPostMedia(null);
     } catch (error) {
-      console.error('Error adding post:', error.message);
+      console.error('Error adding post:', (error as Error).message);
     }
   };
 
@@ -472,7 +475,7 @@ const Community = () => {
                         onError={() => console.log(`Failed to load video: ${post.media_url}`)}
                       />
                     ) : (
-                      <img
+                     <img
                         src={post.media_url}
                         alt="Bejegyzés képe"
                         className="mt-4 rounded-lg w-full object-cover h-64"
