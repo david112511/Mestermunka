@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Star, MapPin, Clock, Users, Award, TrendingUp, ChevronRight, ArrowRight, Sparkles, Dumbbell } from 'lucide-react';
+import { Search, Filter, Star, MapPin, Clock, Users, Award, TrendingUp, ChevronRight, ArrowRight, Sparkles, Dumbbell, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';

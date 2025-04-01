@@ -20,7 +20,7 @@ interface CoachDetailsProps {
 const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { createConversation, setCurrentConversation } = useMessages();
+  const { createOrFindConversation, setCurrentConversation } = useMessages();
   const { toast } = useToast();
   
   if (!coach) return null;
@@ -45,7 +45,7 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
     }
 
     try {
-      const conversationId = await createConversation(coach.id);
+      const conversationId = await createOrFindConversation(String(coach.id));
       if (conversationId) {
         onClose();
         navigate('/messages');

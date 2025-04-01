@@ -29,7 +29,7 @@ export const useProfile = () => {
 
       try {
         setLoading(true);
-        // Először lekérdezzük a profil adatokat
+        // Lekérdezzük a profil adatokat
         const { data, error } = await supabase
           .from('profiles')
           .select('id, first_name, last_name, avatar_url, user_type, phone, bio')
@@ -38,17 +38,10 @@ export const useProfile = () => {
 
         if (error) throw error;
 
-        // Ellenőrizzük, hogy a felhasználó edző-e
-        const { data: trainerData, error: trainerError } = await supabase
-          .from('trainer_profiles')
-          .select('id')
-          .eq('id', user.id)
-          .single();
-
         if (data) {
           setProfile({
             ...data,
-            is_trainer: !trainerError && trainerData !== null
+            is_trainer: data.user_type === 'trainer'
           });
         }
       } catch (err: any) {

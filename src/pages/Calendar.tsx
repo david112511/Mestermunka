@@ -21,6 +21,8 @@ import { supabase } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
 import { useSearchParams } from 'react-router-dom';
 import TrainerAvailabilityCalendar from '@/components/TrainerAvailabilityCalendar';
+import { Switch } from "@/components/ui/switch";
+import RecurringEventDialog from '@/components/RecurringEventDialog';
 
 // Esemény típusok
 type EventType = 'personal' | 'training' | 'group';
@@ -34,6 +36,7 @@ interface Event {
   end_time: string;
   location?: string;
   type: EventType;
+  is_recurring?: boolean;
 }
 
 // Naptár oldal komponens
@@ -48,6 +51,11 @@ const CalendarPage = () => {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeView, setActiveView] = useState<'month' | 'week' | 'day'>('month');
+  const [loading, setLoading] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+  const [recurringDialogAction, setRecurringDialogAction] = useState<'delete' | 'edit'>('delete');
+  const [recurringActionCallback, setRecurringActionCallback] = useState<(deleteAll: boolean) => void>(() => () => {});
   
   // Új esemény alapértelmezett értékei
   const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>({
@@ -97,179 +105,517 @@ const CalendarPage = () => {
     }
   }, [profile, showAvailability, searchParams, setSearchParams, toast]);
 
-  // Események betöltése
-  useEffect(() => {
-    const fetchEvents = async () => {
-      if (!user) return;
+ // Események betöltése
+useEffect(() => {
+  const fetchEvents = async () => {
+    if (!user) return;
 
-      try {
-        // Itt majd a Supabase-ből fogjuk lekérni az eseményeket
-        // Egyelőre példa adatokat használunk
-        const exampleEvents: Event[] = [
-          {
-            id: '1',
-            title: 'Reggeli edzés',
-            description: 'Kardió és erősítés',
-            start_time: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm"),
-            end_time: format(addHours(new Date(), 2), "yyyy-MM-dd'T'HH:mm"),
-            location: 'Edzőterem',
-            type: 'training'
-          },
-          {
-            id: '2',
-            title: 'Csoportos óra',
-            description: 'Spinning',
-            start_time: format(addHours(new Date(), 4), "yyyy-MM-dd'T'HH:mm"),
-            end_time: format(addHours(new Date(), 5), "yyyy-MM-dd'T'HH:mm"),
-            location: 'Spinning terem',
-            type: 'group'
-          },
-          {
-            id: '3',
-            title: 'Személyes találkozó',
-            description: 'Táplálkozási tanácsadás',
-            start_time: format(addHours(new Date(), 8), "yyyy-MM-dd'T'HH:mm"),
-            end_time: format(addHours(new Date(), 9), "yyyy-MM-dd'T'HH:mm"),
-            location: 'Iroda',
-            type: 'personal'
-          }
-        ];
-
-        setEvents(exampleEvents);
-      } catch (error) {
-        console.error('Hiba történt az események betöltése közben:', error);
+    try {
+      setLoading(true);
+      
+      // Lekérdezzük az időpontfoglalásokat a Supabase adatbázisból
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          title,
+          description,
+          start_time,
+          end_time,
+          location,
+          status,
+          is_recurring,
+          trainer_id,
+          client_id
+        `)
+        .or(`trainer_id.eq.${user.id},client_id.eq.${user.id}`);
+      
+      if (appointmentsError) {
+        console.error('Hiba történt az időpontok lekérésekor:', appointmentsError);
+        toast({
+          title: 'Hiba történt',
+          description: 'Nem sikerült betölteni az időpontokat.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Lekérdezzük az eseményeket a Supabase adatbázisból
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select(`
+          id,
+          title,
+          description,
+          start_time,
+          end_time,
+          location,
+          is_recurring,
+          user_id,
+          client_id,
+          event_type
+        `)
+        .or(`user_id.eq.${user.id},client_id.eq.${user.id}`);
+      
+      if (eventsError) {
+        console.error('Hiba történt az események lekérésekor:', eventsError);
         toast({
           title: 'Hiba történt',
           description: 'Nem sikerült betölteni az eseményeket.',
           variant: 'destructive',
         });
+        setLoading(false);
+        return;
       }
-    };
-
-    fetchEvents();
-  }, [user, toast]);
+      
+      // Átalakítjuk az időpontfoglalásokat a megfelelő formátumra
+      const formattedAppointments: Event[] = appointmentsData.map((appointment: any) => {
+        // Meghatározzuk az esemény típusát
+        let eventType: EventType = 'personal';
+        if (appointment.trainer_id === user.id) {
+          eventType = 'training'; // Ha edző vagyok, akkor edzés típusú
+        } else if (appointment.client_id === user.id) {
+          eventType = 'personal'; // Ha kliens vagyok, akkor személyes típusú
+        }
+        
+        // Létrehozzuk az esemény objektumot
+        return {
+          id: appointment.id,
+          title: appointment.title || 'Időpontfoglalás',
+          description: appointment.description || '',
+          start_time: appointment.start_time,
+          end_time: appointment.end_time,
+          location: appointment.location || '',
+          type: eventType,
+          is_recurring: appointment.is_recurring || false
+        };
+      });
+      
+      // Átalakítjuk az eseményeket a megfelelő formátumra
+      const formattedEvents: Event[] = eventsData.map((event: any) => {
+        // Létrehozzuk az esemény objektumot
+        return {
+          id: event.id,
+          title: event.title || 'Esemény',
+          description: event.description || '',
+          start_time: event.start_time,
+          end_time: event.end_time,
+          location: event.location || '',
+          type: event.event_type as EventType || 'personal',
+          is_recurring: event.is_recurring || false
+        };
+      });
+      
+      // Ha van ismétlődő esemény, akkor generáljuk le a következő 12 hétre
+      const allEvents: Event[] = [...formattedAppointments, ...formattedEvents];
+      const recurringEvents: Event[] = [];
+      
+      // Az ismétlődő események kezelése
+      allEvents.forEach(event => {
+        if (event.is_recurring) {
+          // Az eredeti esemény hozzáadása
+          recurringEvents.push(event);
+          
+          // Generáljuk le a következő 12 heti eseményt
+          for (let i = 1; i <= 12; i++) {
+            const startTime = new Date(event.start_time);
+            const endTime = new Date(event.end_time);
+            
+            // Hozzáadunk i hetet az időpontokhoz
+            startTime.setDate(startTime.getDate() + (i * 7));
+            endTime.setDate(endTime.getDate() + (i * 7));
+            
+            // Létrehozzuk az új eseményt
+            recurringEvents.push({
+              ...event,
+              id: `${event.id}-recurring-${i}`,
+              start_time: startTime.toISOString(),
+              end_time: endTime.toISOString(),
+              title: `${event.title} (ismétlődő)`
+            });
+          }
+        } else {
+          // Nem ismétlődő esemény, egyszerűen hozzáadjuk
+          recurringEvents.push(event);
+        }
+      });
+  
+      console.log('Betöltött események:', recurringEvents);
+      setEvents(recurringEvents);
+      setLoading(false);
+    } catch (error) {
+      console.error('Hiba történt az események betöltése közben:', error);
+      toast({
+        title: 'Hiba történt',
+        description: 'Nem sikerült betölteni az eseményeket.',
+        variant: 'destructive',
+      });
+      setLoading(false);
+    }
+  };
+  fetchEvents();
+}, [user, toast]);
 
   // Új esemény hozzáadása
   const handleAddEvent = async () => {
     if (!user) return;
-
-    try {
-      // Itt majd a Supabase-be fogjuk menteni az eseményt
-      // Egyelőre csak a helyi állapotot frissítjük
-      const newEventWithId: Event = {
-        ...newEvent,
-        id: Math.random().toString(36).substring(2, 9)
-      };
-
-      setEvents([...events, newEventWithId]);
-      setShowAddEventDialog(false);
-      resetNewEvent();
-
-      toast({
-        title: 'Esemény hozzáadva',
-        description: 'Az esemény sikeresen hozzá lett adva a naptárhoz.',
-      });
-    } catch (error) {
-      console.error('Hiba történt az esemény hozzáadása közben:', error);
+    
+    // Ellenőrizzük, hogy a profil betöltődött-e
+    if (!profile) {
       toast({
         title: 'Hiba történt',
-        description: 'Nem sikerült hozzáadni az eseményt.',
+        description: 'A felhasználói profil nem érhető el. Kérjük, próbáld újra később.',
         variant: 'destructive',
       });
+      return;
     }
-  };
+    
+    // Biztosítsuk, hogy a client_id mindig ki legyen töltve
+    const isTrainer = !!profile.is_trainer;
+    const trainerId = isTrainer ? user.id : null;
+    const clientId = user.id;
+
+    try {
+      console.log('Esemény hozzáadása:', {
+        title: newEvent.title,
+        is_recurring: isRecurring,
+        trainer_id: trainerId,
+        client_id: clientId,
+        user_id: user.id,
+        is_trainer: isTrainer
+      });
+      
+      // Generáljunk új egyedi azonosítót az eseménynek
+      const eventId = crypto.randomUUID();
+
+      // Közvetlenül az events táblába szúrjuk be az adatokat
+      // Csak a biztosan létező mezőket használjuk
+      const { data, error } = await supabase
+      .from('events')
+      .insert([
+        {
+          title: newEvent.title,
+          description: newEvent.description,
+          start_time: newEvent.start_time,
+          end_time: newEvent.end_time,
+          location: newEvent.location,
+          is_recurring: isRecurring,
+          user_id: user.id, // A létrehozó felhasználó azonosítója
+          client_id: isTrainer ? clientId : user.id, // Ha edző vagyok, akkor a kiválasztott kliens, egyébként én magam
+          event_type: newEvent.type // Az esemény típusa (personal, training, group)
+        }
+      ])
+      .select();
+  
+      if (error) {
+        console.error('Hiba történt az esemény hozzáadása közben:', error);
+        toast({
+          title: 'Hiba történt',
+          description: `Nem sikerült hozzáadni az eseményt: ${error.message}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Frissítjük a helyi állapotot az új eseménnyel
+    const newEventWithId: Event = {
+      ...newEvent,
+      id: data[0].id,
+      is_recurring: isRecurring
+    };
+
+    setEvents([...events, newEventWithId]);
+    setShowAddEventDialog(false);
+    resetNewEvent();
+
+    toast({
+      title: 'Esemény hozzáadva',
+      description: `Az esemény sikeresen hozzá lett adva a naptárhoz${isRecurring ? ' (heti ismétlődéssel)' : ''}.`,
+    });
+  } catch (error) {
+    console.error('Hiba történt az esemény hozzáadása közben:', error);
+    toast({
+      title: 'Hiba történt',
+      description: 'Nem sikerült hozzáadni az eseményt.',
+      variant: 'destructive',
+    });
+  }
+};
+  
 
   // Esemény törlése
-  const handleDeleteEvent = async () => {
-    if (!selectedEvent) return;
+const handleDeleteEvent = async (deleteAll = false) => {
+  if (!selectedEvent) return;
 
-    try {
-      // Itt majd a Supabase-ből fogjuk törölni az eseményt
-      // Egyelőre csak a helyi állapotot frissítjük
+  // Ellenőrizzük, hogy ismétlődő eseményről van-e szó
+  const isRecurringInstance = selectedEvent.id.includes('-recurring-');
+  const isOriginalRecurring = selectedEvent.is_recurring;
+  
+  // Ha ismétlődő esemény és még nem kérdeztük meg a felhasználót
+  if ((isRecurringInstance || isOriginalRecurring) && !showRecurringDialog) {
+    setRecurringDialogAction('delete');
+    setRecurringActionCallback(() => deleteAll => handleDeleteEventConfirmed(deleteAll));
+    setShowRecurringDialog(true);
+    return;
+  }
+  
+  await handleDeleteEventConfirmed(deleteAll);
+};
+
+// Esemény törlése megerősítés után
+const handleDeleteEventConfirmed = async (deleteAll = false) => {
+  if (!selectedEvent) return;
+  
+  try {
+    // Meghatározzuk, hogy melyik táblából kell törölni
+    // Ha az ID tartalmazza a "recurring" szót, akkor ez egy kliens oldali generált ismétlődő esemény
+    const isClientSideRecurring = selectedEvent.id.includes('-recurring-');
+    
+    // Ha ez egy kliens oldali generált ismétlődő esemény, akkor csak a helyi állapotot frissítjük
+    if (isClientSideRecurring && !deleteAll) {
+      // Csak a kiválasztott eseményt távolítjuk el a helyi állapotból
       setEvents(events.filter(event => event.id !== selectedEvent.id));
-      setShowEventDetailsDialog(false);
-      setSelectedEvent(null);
-
-      toast({
-        title: 'Esemény törölve',
-        description: 'Az esemény sikeresen törölve lett a naptárból.',
-      });
-    } catch (error) {
-      console.error('Hiba történt az esemény törlése közben:', error);
-      toast({
-        title: 'Hiba történt',
-        description: 'Nem sikerült törölni az eseményt.',
-        variant: 'destructive',
-      });
+    } else {
+      // Meghatározzuk az eredeti esemény azonosítóját
+      const originalId = isClientSideRecurring 
+        ? selectedEvent.id.split('-recurring-')[0] 
+        : selectedEvent.id;
+      
+      // Ellenőrizzük, hogy az esemény az events vagy az appointments táblában van-e
+      // Először próbáljuk meg az events táblából törölni
+      const { error: eventsError } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', originalId);
+      
+      // Ha nem sikerült törölni az events táblából, próbáljuk meg az appointments táblából
+      if (eventsError) {
+        console.log('Az esemény nem található az events táblában, próbáljuk az appointments táblát:', eventsError);
+        
+        const { error: appointmentsError } = await supabase
+          .from('appointments')
+          .delete()
+          .eq('id', originalId);
+        
+        if (appointmentsError) {
+          console.error('Hiba történt az esemény törlése közben:', appointmentsError);
+          toast({
+            title: 'Hiba történt',
+            description: 'Nem sikerült törölni az eseményt.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+      
+      // Frissítjük a helyi állapotot
+      if (deleteAll) {
+        // Ha az összes ismétlődést törölni kell, akkor eltávolítjuk az eredeti eseményt és az összes ismétlődést
+        const originalIdPrefix = isClientSideRecurring ? selectedEvent.id.split('-recurring-')[0] : selectedEvent.id;
+        setEvents(events.filter(event => {
+          // Ha az esemény azonosítója nem egyezik az eredetivel és nem tartalmazza az eredeti azonosítót a recurring részben
+          return !(event.id === originalIdPrefix || (event.id.includes('-recurring-') && event.id.startsWith(originalIdPrefix)));
+        }));
+      } else {
+        // Ha csak az adott alkalmat kell törölni, akkor csak azt távolítjuk el
+        setEvents(events.filter(event => event.id !== selectedEvent.id));
+      }
     }
-  };
-
-  // Esemény szerkesztése
-  const handleEditEvent = () => {
-    if (!selectedEvent) return;
-
-    setNewEvent({
-      title: selectedEvent.title,
-      description: selectedEvent.description || '',
-      start_time: selectedEvent.start_time,
-      end_time: selectedEvent.end_time,
-      location: selectedEvent.location || '',
-      type: selectedEvent.type
-    });
-
-    setIsEditMode(true);
+    
     setShowEventDetailsDialog(false);
-    setShowAddEventDialog(true);
-  };
+    setSelectedEvent(null);
 
-  // Esemény frissítése
-  const handleUpdateEvent = async () => {
-    if (!selectedEvent) return;
+    toast({
+      title: 'Esemény törölve',
+      description: `Az esemény sikeresen törölve lett a naptárból${deleteAll ? ' az összes ismétlődéssel együtt' : ''}.`,
+    });
+  } catch (error) {
+    console.error('Hiba történt az esemény törlése közben:', error);
+    toast({
+      title: 'Hiba történt',
+      description: 'Nem sikerült törölni az eseményt.',
+      variant: 'destructive',
+    });
+  }
+};
 
-    try {
-      // Itt majd a Supabase-ben fogjuk frissíteni az eseményt
-      // Egyelőre csak a helyi állapotot frissítjük
+ // Esemény szerkesztése
+const handleEditEvent = (editAll = false) => {
+  if (!selectedEvent) return;
+  
+  // Ellenőrizzük, hogy ismétlődő eseményről van-e szó
+  const isRecurringInstance = selectedEvent.id.includes('-recurring-');
+  const isOriginalRecurring = selectedEvent.is_recurring;
+  
+  // Ha ismétlődő esemény és még nem kérdeztük meg a felhasználót
+  if ((isRecurringInstance || isOriginalRecurring) && !showRecurringDialog) {
+    setRecurringDialogAction('edit');
+    setRecurringActionCallback(() => editAll => handleEditEventConfirmed(editAll));
+    setShowRecurringDialog(true);
+    return;
+  }
+  
+  handleEditEventConfirmed(editAll);
+};
+
+// Esemény szerkesztése megerősítés után
+const handleEditEventConfirmed = (editAll = false) => {
+  if (!selectedEvent) return;
+  
+  // Ha az összes ismétlődést szerkeszteni kell, akkor az eredeti eseményt szerkesztjük
+  if (editAll && selectedEvent.id.includes('-recurring-')) {
+    // Megkeressük az eredeti eseményt
+    const originalId = selectedEvent.id.split('-recurring-')[0];
+    const originalEvent = events.find(event => event.id === originalId);
+    
+    if (originalEvent) {
+      setSelectedEvent(originalEvent);
+    }
+  }
+  
+  setIsEditMode(true);
+  setNewEvent({
+    ...selectedEvent,
+    is_recurring: selectedEvent.is_recurring || false
+  });
+  setShowEventDetailsDialog(false);
+  setShowAddEventDialog(true);
+};
+    // Esemény frissítése
+const handleUpdateEvent = async (editAll = false) => {
+  if (!selectedEvent || !newEvent) return;
+  
+  try {
+    // Meghatározzuk, hogy melyik táblából kell frissíteni
+    const isRecurringInstance = selectedEvent.id.includes('-recurring-');
+    const originalId = isRecurringInstance ? selectedEvent.id.split('-recurring-')[0] : selectedEvent.id;
+    
+    // Először próbáljuk meg az events táblából frissíteni
+    const { error: eventsError } = await supabase
+      .from('events')
+      .update({
+        title: newEvent.title,
+        description: newEvent.description,
+        start_time: newEvent.start_time,
+        end_time: newEvent.end_time,
+        location: newEvent.location,
+        is_recurring: newEvent.is_recurring,
+        event_type: newEvent.type
+      })
+      .eq('id', originalId);
+    
+    // Ha nem sikerült frissíteni az events táblából, próbáljuk meg az appointments táblából
+    if (eventsError) {
+      console.log('Az esemény nem található az events táblában, próbáljuk az appointments táblát:', eventsError);
+      
+      const { error: appointmentsError } = await supabase
+        .from('appointments')
+        .update({
+          title: newEvent.title,
+          description: newEvent.description,
+          start_time: newEvent.start_time,
+          end_time: newEvent.end_time,
+          location: newEvent.location,
+          is_recurring: newEvent.is_recurring
+        })
+        .eq('id', originalId);
+      
+      if (appointmentsError) {
+        console.error('Hiba történt az esemény frissítése közben:', appointmentsError);
+        toast({
+          title: 'Hiba történt',
+          description: 'Nem sikerült frissíteni az eseményt.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    
+    // Frissítjük a helyi állapotot
+    if (editAll && (isRecurringInstance || selectedEvent.is_recurring)) {
+      // Ha az összes ismétlődést frissíteni kell
+      const updatedEvents = events.map(event => {
+        // Ha az esemény az eredeti vagy annak egy ismétlődése
+        if (event.id === originalId || (event.id.includes('-recurring-') && event.id.startsWith(originalId))) {
+          // Megtartjuk az eredeti ID-t és az ismétlődési információkat
+          const isRecurringInstance = event.id.includes('-recurring-');
+          const recurringIndex = isRecurringInstance ? event.id.split('-recurring-')[1] : null;
+          
+          // Ha ez egy ismétlődő esemény, akkor kiszámoljuk az új időpontot
+          if (isRecurringInstance && recurringIndex) {
+            const weekOffset = parseInt(recurringIndex);
+            const startTime = new Date(newEvent.start_time);
+            const endTime = new Date(newEvent.end_time);
+            
+            startTime.setDate(startTime.getDate() + (weekOffset * 7));
+            endTime.setDate(endTime.getDate() + (weekOffset * 7));
+            
+            return {
+              ...newEvent,
+              id: event.id,
+              start_time: startTime.toISOString(),
+              end_time: endTime.toISOString(),
+              title: `${newEvent.title} (ismétlődő)`
+            };
+          }
+          
+          // Ha ez az eredeti esemény
+          return {
+            ...newEvent,
+            id: event.id
+          };
+        }
+        
+        return event;
+      });
+      
+      setEvents(updatedEvents);
+    } else {
+      // Ha csak az adott alkalmat kell frissíteni
       const updatedEvents = events.map(event => {
         if (event.id === selectedEvent.id) {
           return {
-            ...event,
-            ...newEvent
+            ...newEvent,
+            id: event.id
           };
         }
         return event;
       });
-
+      
       setEvents(updatedEvents);
-      setShowAddEventDialog(false);
-      setIsEditMode(false);
-      setSelectedEvent(null);
-      resetNewEvent();
-
-      toast({
-        title: 'Esemény frissítve',
-        description: 'Az esemény sikeresen frissítve lett.',
-      });
-    } catch (error) {
-      console.error('Hiba történt az esemény frissítése közben:', error);
-      toast({
-        title: 'Hiba történt',
-        description: 'Nem sikerült frissíteni az eseményt.',
-        variant: 'destructive',
-      });
     }
-  };
-
-  // Új esemény alaphelyzetbe állítása
-  const resetNewEvent = () => {
-    setNewEvent({
-      title: '',
-      description: '',
-      start_time: format(new Date().setHours(9, 0, 0, 0), "yyyy-MM-dd'T'HH:mm"),
-      end_time: format(new Date().setHours(10, 0, 0, 0), "yyyy-MM-dd'T'HH:mm"),
-      location: '',
-      type: 'personal'
+    
+    setShowAddEventDialog(false);
+    setIsEditMode(false);
+    resetNewEvent();
+    
+    toast({
+      title: 'Esemény frissítve',
+      description: `Az esemény sikeresen frissítve lett${editAll ? ' az összes ismétlődéssel együtt' : ''}.`,
     });
-  };
+  } catch (error) {
+    console.error('Hiba történt az esemény frissítése közben:', error);
+    toast({
+      title: 'Hiba történt',
+      description: 'Nem sikerült frissíteni az eseményt.',
+      variant: 'destructive',
+    });
+  }
+};
+
+ // Új esemény alaphelyzetbe állítása
+const resetNewEvent = () => {
+  setNewEvent({
+    title: '',
+    description: '',
+    start_time: format(new Date().setHours(9, 0, 0, 0), "yyyy-MM-dd'T'HH:mm"),
+    end_time: format(new Date().setHours(10, 0, 0, 0), "yyyy-MM-dd'T'HH:mm"),
+    location: '',
+    type: 'personal'
+  });
+  setIsRecurring(false);
+};
 
   // Esemény típus színének meghatározása
   const getEventTypeColor = (type: EventType) => {
@@ -521,6 +867,15 @@ const CalendarPage = () => {
                   placeholder="Esemény leírása"
                 />
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="recurring"
+                  checked={isRecurring}
+                  onCheckedChange={setIsRecurring}
+                />
+                <Label htmlFor="recurring">Heti ismétlődés</Label>
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -571,7 +926,7 @@ const CalendarPage = () => {
                 </Select>
               </div>
             </div>
-            
+
             <DialogFooter>
               <Button variant="outline" onClick={() => {
                 setShowAddEventDialog(false);
@@ -583,7 +938,7 @@ const CalendarPage = () => {
               }}>
                 Mégse
               </Button>
-              <Button onClick={isEditMode ? handleUpdateEvent : handleAddEvent}>
+              <Button onClick={() => isEditMode ? handleUpdateEvent(false) : handleAddEvent()}>
                 {isEditMode ? 'Mentés' : 'Hozzáadás'}
               </Button>
             </DialogFooter>
@@ -635,11 +990,11 @@ const CalendarPage = () => {
                 </div>
                 
                 <DialogFooter className="flex justify-between">
-                  <Button variant="destructive" onClick={handleDeleteEvent}>
+                  <Button variant="destructive" onClick={() => handleDeleteEvent(false)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Törlés
                   </Button>
-                  <Button onClick={handleEditEvent}>
+                  <Button onClick={() => handleEditEvent(false)}>
                     <Edit className="mr-2 h-4 w-4" />
                     Szerkesztés
                   </Button>
@@ -648,6 +1003,26 @@ const CalendarPage = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        <RecurringEventDialog
+          open={showRecurringDialog}
+          onOpenChange={setShowRecurringDialog}
+          onConfirm={(deleteAll) => {
+            if (typeof recurringActionCallback === 'function') {
+              recurringActionCallback(deleteAll);
+            }
+            setShowRecurringDialog(false);
+          }}
+          onCancel={() => {
+            setShowRecurringDialog(false);
+            setShowEventDetailsDialog(false);
+            setSelectedEvent(null);
+          }}
+          title={`Ismétlődő esemény ${recurringDialogAction === 'delete' ? 'törlése' : 'szerkesztése'}`}
+          description={`Ez egy ismétlődő esemény. Szeretnéd ${recurringDialogAction === 'delete' ? 'törölni' : 'szerkeszteni'} az összes ismétlődést, vagy csak ezt az alkalmat?`}
+          actionType={recurringDialogAction}
+        />
+
       </main>
     </div>
   );
