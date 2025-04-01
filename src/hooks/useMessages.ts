@@ -10,8 +10,8 @@ export interface Message {
   conversation_id: string;
   sender_id: string;
   content: string;
-  is_read: boolean;
   created_at: string;
+  is_read: boolean;
   sender?: {
     id: string;
     first_name: string;
@@ -20,47 +20,44 @@ export interface Message {
   };
 }
 
-export interface ConversationParticipant {
-  id: string;
-  conversation_id: string;
-  user_id: string;
-  user: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    avatar_url: string;
-    is_trainer: boolean;
-  };
-}
-
 export interface Conversation {
   id: string;
   created_at: string;
   updated_at: string;
-  participants: ConversationParticipant[];
-  last_message: Message | null;
-  unread_count: number;
+  participants?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url: string;
+  }[];
+  last_message?: {
+    content: string;
+    created_at: string;
+    sender_id: string;
+  };
+  unread_count?: number;
 }
 
 export const useMessages = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-
+  
   // Beszélgetések lekérdezése
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user) return;
     
     setConversationsLoading(true);
+    setError(null);
+    
     try {
       // Közvetlenül a conversations táblából kérdezzük le az adatokat
-      // Ez egy ideiglenes megoldás, amíg az RLS szabályok nincsenek javítva
       const { data: allConversations, error: conversationsError } = await supabase
         .from('conversations')
         .select('*')
@@ -80,42 +77,24 @@ export const useMessages = () => {
         return;
       }
       
-      // Közvetlenül a messages táblából kérdezzük le az üzeneteket
-      // Ez segít azonosítani, hogy mely beszélgetésekben vesz részt a felhasználó
-      const { data: userMessages, error: messagesError } = await supabase
-        .from('messages')
-        .select('conversation_id, sender_id')
-        .or(`sender_id.eq.${user.id}`)
-        .limit(100);
-        
-      if (messagesError) {
-        console.error('Hiba az üzenetek lekérdezésekor:', messagesError);
-      }
-      
-      // Lekérdezzük a conversation_participants táblából is a felhasználó beszélgetéseit
-      const { data: participantsData, error: participantsError } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id')
-        .eq('user_id', user.id)
-        .limit(100);
-        
-      if (participantsError) {
-        console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', participantsError);
-      }
-      
       // Azonosítjuk azokat a beszélgetéseket, amelyekben a felhasználó részt vesz
-      // az üzenetek és a résztvevők alapján
       let userConversationIds: string[] = [];
       
-      // Üzenetek alapján
-      if (userMessages && userMessages.length > 0) {
-        userConversationIds = [...new Set(userMessages.map(m => m.conversation_id))];
-      }
-      
-      // Résztvevők alapján
-      if (participantsData && participantsData.length > 0) {
-        const participantConversationIds = participantsData.map(p => p.conversation_id);
-        userConversationIds = [...new Set([...userConversationIds, ...participantConversationIds])];
+      try {
+        // Lekérdezzük a conversation_participants táblából a felhasználó beszélgetéseit
+        const { data: participantsData, error: participantsError } = await supabase
+          .from('conversation_participants')
+          .select('conversation_id')
+          .eq('user_id', user.id)
+          .limit(100);
+          
+        if (participantsError) {
+          console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', participantsError);
+        } else if (participantsData && participantsData.length > 0) {
+          userConversationIds = participantsData.map(p => p.conversation_id);
+        }
+      } catch (error) {
+        console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', error);
       }
       
       // Ha nem találtunk beszélgetéseket, akkor minden beszélgetést megjelenítünk
@@ -124,188 +103,124 @@ export const useMessages = () => {
         ? allConversations.filter(c => userConversationIds.includes(c.id))
         : allConversations;
       
-      // Egyszerűsített beszélgetések létrehozása
-      const simplifiedConversations = conversationsToProcess.map(c => ({
-        ...c,
-        participants: [],  // Üres résztvevők lista
-        last_message: null,
-        unread_count: 0
-      }));
+      // Lekérdezzük a résztvevőket minden beszélgetéshez
+      const processedConversations = await Promise.all(
+        conversationsToProcess.map(async (conversation) => {
+          try {
+            // Lekérdezzük a résztvevőket
+            const { data: participants, error: participantsError } = await supabase
+              .from('conversation_participants')
+              .select('user_id')
+              .eq('conversation_id', conversation.id);
+              
+            if (participantsError) {
+              console.error('Hiba a résztvevők lekérdezésekor:', participantsError);
+              return conversation;
+            }
+            
+            // Lekérdezzük a résztvevők profiladatait
+            const participantIds = participants?.map(p => p.user_id) || [];
+            
+            if (participantIds.length === 0) {
+              return conversation;
+            }
+            
+            const { data: profiles, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name, avatar_url')
+              .in('id', participantIds);
+              
+            if (profilesError) {
+              console.error('Hiba a profilok lekérdezésekor:', profilesError);
+              return conversation;
+            }
+            
+            // Lekérdezzük az utolsó üzenetet
+            const { data: lastMessages, error: lastMessageError } = await supabase
+              .from('messages')
+              .select('content, created_at, sender_id')
+              .eq('conversation_id', conversation.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+              
+            if (lastMessageError) {
+              console.error('Hiba az utolsó üzenet lekérdezésekor:', lastMessageError);
+            }
+            
+            // Lekérdezzük az olvasatlan üzenetek számát
+            const { data: unreadMessages, error: unreadError } = await supabase
+              .from('messages')
+              .select('id')
+              .eq('conversation_id', conversation.id)
+              .eq('is_read', false)
+              .not('sender_id', 'eq', user.id);
+              
+            if (unreadError) {
+              console.error('Hiba az olvasatlan üzenetek lekérdezésekor:', unreadError);
+            }
+            
+            return {
+              ...conversation,
+              participants: profiles || [],
+              last_message: lastMessages && lastMessages.length > 0 ? lastMessages[0] : undefined,
+              unread_count: unreadMessages ? unreadMessages.length : 0
+            };
+          } catch (error) {
+            console.error('Hiba a beszélgetés feldolgozásakor:', error);
+            return conversation;
+          }
+        })
+      );
       
-      setConversations(simplifiedConversations);
+      setConversations(processedConversations);
       setConversationsLoading(false);
-      
-      // Háttérben próbáljuk meg lekérdezni a résztvevőket és az üzeneteket
-      // Ez nem blokkolja a felhasználói felületet
-      fetchConversationDetails(simplifiedConversations);
-      
     } catch (error) {
       console.error('Hiba a beszélgetések lekérdezésekor:', error);
       setError('Nem sikerült betölteni a beszélgetéseket.');
       setConversationsLoading(false);
     }
-  };
-  
-  // Beszélgetések részleteinek lekérdezése a háttérben
-  const fetchConversationDetails = async (conversations) => {
-    if (!conversations || conversations.length === 0 || !user) return;
+  }, [user]);
+
+  // Üzenetek lekérdezése
+  const fetchMessages = useCallback(async (conversationId: string) => {
+    if (!user || !conversationId) return;
+    
+    setLoading(true);
+    setError(null);
+    setCurrentConversationId(conversationId);
     
     try {
-      const conversationIds = conversations.map(c => c.id);
-      
       // Üzenetek lekérdezése
-      const { data: messages, error: messagesError } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .in('conversation_id', conversationIds)
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
         
-      if (messagesError) {
-        console.error('Hiba az üzenetek részletes lekérdezésekor:', messagesError);
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        setMessages([]);
+        setLoading(false);
         return;
       }
       
-      // Résztvevők lekérdezése
-      const { data: participants, error: participantsError } = await supabase
-        .from('conversation_participants')
-        .select(`
-          id,
-          conversation_id,
-          user_id
-        `)
-        .in('conversation_id', conversationIds);
-        
-      if (participantsError) {
-        console.error('Hiba a résztvevők lekérdezésekor:', participantsError);
-      }
-      
-      // Résztvevők felhasználói adatainak lekérdezése
-      let participantUserIds: string[] = [];
-      if (participants && participants.length > 0) {
-        participantUserIds = [...new Set(participants.map(p => p.user_id))];
-      }
-      
-      const { data: participantUsers, error: usersError } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, avatar_url, user_type')
-        .in('id', participantUserIds);
-        
-      if (usersError) {
-        console.error('Hiba a résztvevők felhasználói adatainak lekérdezésekor:', usersError);
-      }
-      
-      // Felhasználók térképének létrehozása
-      const usersMap = {};
-      if (participantUsers && participantUsers.length > 0) {
-        participantUsers.forEach(user => {
-          usersMap[user.id] = {
-            ...user,
-            is_trainer: user.user_type === 'trainer'
-          };
-        });
-      }
-      
-      // Résztvevők térképének létrehozása
-      const participantsMap = {};
-      if (participants && participants.length > 0 && participantUsers && participantUsers.length > 0) {
-        conversations.forEach(conv => {
-          const convParticipants = participants.filter(p => p.conversation_id === conv.id);
-          participantsMap[conv.id] = convParticipants.map(p => ({
-            ...p,
-            user: usersMap[p.user_id] || {
-              id: p.user_id,
-              first_name: '',
-              last_name: '',
-              avatar_url: '',
-              is_trainer: false
-            }
-          }));
-        });
-      }
-      
-      // Utolsó üzenetek és olvasatlan üzenetek számának kiszámítása
-      const lastMessagesMap = {};
-      const unreadCountsMap = {};
-      
-      if (messages && messages.length > 0) {
-        messages.forEach(msg => {
-          const convId = msg.conversation_id;
-          
-          // Utolsó üzenet
-          if (!lastMessagesMap[convId]) {
-            lastMessagesMap[convId] = msg;
-          }
-          
-          // Olvasatlan üzenetek száma
-          if (msg.sender_id !== user.id && !msg.is_read) {
-            if (!unreadCountsMap[convId]) {
-              unreadCountsMap[convId] = 0;
-            }
-            unreadCountsMap[convId]++;
-          }
-        });
-      }
-      
-      // Beszélgetések frissítése a részletekkel
-      const updatedConversations = conversations.map(c => ({
-        ...c,
-        participants: participantsMap[c.id] || [],
-        last_message: lastMessagesMap[c.id] || null,
-        unread_count: unreadCountsMap[c.id] || 0
-      }));
-      
-      // Beszélgetések rendezése az utolsó üzenet időpontja alapján
-      updatedConversations.sort((a, b) => {
-        const aTime = a.last_message ? new Date(a.last_message.created_at).getTime() : new Date(a.updated_at).getTime();
-        const bTime = b.last_message ? new Date(b.last_message.created_at).getTime() : new Date(b.updated_at).getTime();
-        return bTime - aTime;
-      });
-      
-      setConversations(updatedConversations);
-      
-    } catch (error) {
-      console.error('Hiba a beszélgetések részleteinek lekérdezésekor:', error);
-    }
-  };
-
-  // Egy beszélgetés üzeneteinek lekérdezése
-  const fetchMessages = async (conversationId: string) => {
-    if (!user || !conversationId) return;
-    
-    try {
-      setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          conversation_id,
-          sender_id,
-          content,
-          is_read,
-          created_at
-        `)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
       // Küldők lekérdezése
-      const senderIds = [...new Set(data.map(m => m.sender_id))];
+      const senderIds = [...new Set(data.map(message => message.sender_id))];
+      
       const { data: senders, error: sendersError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, avatar_url')
         .in('id', senderIds);
-
+        
       if (sendersError) throw sendersError;
-
+      
       // Küldők térképének létrehozása
       const sendersMap = senders.reduce((acc, sender) => {
         acc[sender.id] = sender;
         return acc;
       }, {});
-
+      
       // Üzenetek formázása a küldőkkel
       const formattedMessages = data.map(message => ({
         ...message,
@@ -321,24 +236,24 @@ export const useMessages = () => {
           avatar_url: '',
         }
       }));
-
+      
       setMessages(formattedMessages);
       setLoading(false);
       
-      // Olvasottnak jelöljük az üzeneteket - ezt kivesszük innen, hogy elkerüljük a végtelen ciklust
-      // markMessagesAsRead(conversationId);
+      // Olvasottnak jelöljük az üzeneteket
+      await markMessagesAsRead(conversationId);
       
     } catch (error) {
       console.error('Hiba az üzenetek lekérdezésekor:', error);
       setError('Nem sikerült betölteni az üzeneteket.');
       setLoading(false);
     }
-  };
+  }, [user]);
 
   // Üzenet küldése
-  const sendMessage = async (conversationId: string, content: string) => {
+  const sendMessage = useCallback(async (conversationId: string, content: string) => {
     if (!user || !conversationId || !content.trim()) return;
-
+    
     try {
       const { data, error } = await supabase
         .from('messages')
@@ -348,11 +263,16 @@ export const useMessages = () => {
           content: content.trim()
         })
         .select();
-
+        
       if (error) throw error;
-
+      
       // Frissítjük a beszélgetéseket
-      setRefreshTrigger(prev => prev + 1);
+      fetchConversations();
+      
+      // Ha az aktuális beszélgetésben vagyunk, frissítjük az üzeneteket is
+      if (currentConversationId === conversationId) {
+        fetchMessages(conversationId);
+      }
       
       return data[0];
     } catch (error) {
@@ -364,12 +284,12 @@ export const useMessages = () => {
       });
       return null;
     }
-  };
+  }, [user, currentConversationId, fetchConversations, fetchMessages]);
 
   // Üzenetek olvasottnak jelölése
-  const markMessagesAsRead = async (conversationId: string) => {
+  const markMessagesAsRead = useCallback(async (conversationId: string) => {
     if (!user || !conversationId) return;
-
+    
     try {
       const { error } = await supabase
         .from('messages')
@@ -377,23 +297,19 @@ export const useMessages = () => {
         .eq('conversation_id', conversationId)
         .not('sender_id', 'eq', user.id)
         .eq('is_read', false);
-
+        
       if (error) throw error;
-
-      // Frissítjük a beszélgetéseket, de nem azonnal, hanem késleltetve
-      // Ez segít elkerülni a túl sok API hívást
-      setTimeout(() => {
-        setRefreshTrigger(prev => prev + 1);
-      }, 1000);
+      
+      // Nem frissítjük automatikusan a beszélgetéseket
     } catch (error) {
       console.error('Hiba az üzenetek olvasottnak jelölésekor:', error);
     }
-  };
+  }, [user]);
 
   // Új beszélgetés létrehozása vagy meglévő keresése
-  const createOrFindConversation = async (otherUserId: string) => {
+  const createOrFindConversation = useCallback(async (otherUserId: string) => {
     if (!user || !otherUserId) return null;
-
+    
     try {
       // Ellenőrizzük, hogy létezik-e már beszélgetés a két felhasználó között
       const { data: existingConversation, error: checkError } = await supabase
@@ -401,11 +317,11 @@ export const useMessages = () => {
           user1_id: user.id,
           user2_id: otherUserId
         });
-
+        
       if (checkError) throw checkError;
-
+      
       // Frissítjük a beszélgetéseket
-      setRefreshTrigger(prev => prev + 1);
+      fetchConversations();
       
       return existingConversation;
     } catch (error) {
@@ -417,36 +333,180 @@ export const useMessages = () => {
       });
       return null;
     }
-  };
+  }, [user, fetchConversations]);
 
-  // Beszélgetések lekérdezése a komponens betöltésekor és a frissítési trigger változásakor
+  // Beszélgetések lekérdezése a komponens betöltésekor
   useEffect(() => {
     fetchConversations();
-  }, [user, refreshTrigger]);
+  }, [fetchConversations]);
 
-  // Feliratkozás az új üzenetekre
-  useEffect(() => {
-    if (!user) return;
+  // Nem iratkozunk fel az új üzenetekre, mert az végtelen ciklust okozhat
+  // Helyette manuálisan frissítünk
 
-    // Feliratkozás az új üzenetekre
-    const messagesSubscription = supabase
-      .channel('messages-channel')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-      }, (payload) => {
-        // Késleltetett frissítés, hogy elkerüljük a túl sok API hívást
-        setTimeout(() => {
-          setRefreshTrigger(prev => prev + 1);
-        }, 1000);
-      })
-      .subscribe();
+  // Üzenet törlése
+  const deleteMessage = useCallback(async (messageId: string) => {
+    try {
+      if (!user) throw new Error('A felhasználó nincs bejelentkezve');
+      
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+        
+      if (error) throw error;
+      
+      // Frissítsük a beszélgetéseket a törlés után
+      await fetchConversations();
+      return true;
+    } catch (error) {
+      console.error('Hiba az üzenet törlése közben:', error);
+      throw error;
+    }
+  }, [user, fetchConversations]);
 
-    return () => {
-      supabase.removeChannel(messagesSubscription);
-    };
-  }, [user]);
+  // Üzenet szerkesztése
+  const updateMessage = useCallback(async (messageId: string, content: string) => {
+    try {
+      if (!user) throw new Error('A felhasználó nincs bejelentkezve');
+      
+      const { error } = await supabase
+        .from('messages')
+        .update({ content })
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+        
+      if (error) throw error;
+      
+      // Frissítsük a beszélgetéseket és az üzeneteket a szerkesztés után
+      if (currentConversationId) {
+        await fetchMessages(currentConversationId);
+      }
+      await fetchConversations();
+      return true;
+    } catch (error) {
+      console.error('Hiba az üzenet szerkesztése közben:', error);
+      throw error;
+    }
+  }, [user, fetchConversations, fetchMessages, currentConversationId]);
+
+  // Reakciók kezelése
+  const getMessageReactions = useCallback(async (messageId: string) => {
+    if (!user) return [];
+    
+    try {
+      // Először ellenőrizzük, hogy létezik-e a message_reactions tábla
+      const { error: checkError } = await supabase
+        .from('message_reactions')
+        .select('id')
+        .limit(1);
+      
+      // Ha a tábla nem létezik, használjuk a localStorage-ot
+      if (checkError && checkError.message.includes('does not exist')) {
+        console.log('message_reactions tábla nem létezik, localStorage használata');
+        const localReactions = localStorage.getItem(`message_reactions_${messageId}`);
+        return localReactions ? JSON.parse(localReactions) : [];
+      }
+      
+      // Ha a tábla létezik, lekérdezzük a reakciókat
+      const { data, error } = await supabase
+        .from('message_reactions')
+        .select('*')
+        .eq('message_id', messageId);
+      
+      if (error) throw error;
+      
+      return data || [];
+    } catch (error) {
+      console.error('Hiba a reakciók lekérdezése közben:', error);
+      
+      // Fallback: localStorage használata
+      const localReactions = localStorage.getItem(`message_reactions_${messageId}`);
+      return localReactions ? JSON.parse(localReactions) : [];
+    }
+  }, [user, supabase]);
+
+  // Reakció hozzáadása
+  const addReaction = useCallback(async (messageId: string, reaction: string) => {
+    if (!user) throw new Error('Nincs bejelentkezett felhasználó');
+    
+    try {
+      // Először ellenőrizzük, hogy létezik-e a message_reactions tábla
+      const { error: checkError } = await supabase
+        .from('message_reactions')
+        .select('id')
+        .limit(1);
+      
+      // Ha a tábla nem létezik, használjuk a localStorage-ot
+      if (checkError && checkError.message.includes('does not exist')) {
+        console.log('message_reactions tábla nem létezik, localStorage használata');
+        
+        // Lekérjük a meglévő reakciókat
+        const localReactions = localStorage.getItem(`message_reactions_${messageId}`);
+        const reactions = localReactions ? JSON.parse(localReactions) : [];
+        
+        // Hozzáadjuk az új reakciót
+        const newReaction = {
+          id: Date.now().toString(),
+          message_id: messageId,
+          user_id: user.id,
+          reaction,
+          created_at: new Date().toISOString()
+        };
+        
+        reactions.push(newReaction);
+        
+        // Mentjük a localStorage-ba
+        localStorage.setItem(`message_reactions_${messageId}`, JSON.stringify(reactions));
+        
+        return newReaction;
+      }
+      
+      // Ha a tábla létezik, hozzáadjuk a reakciót
+      const { data, error } = await supabase
+        .from('message_reactions')
+        .insert([
+          {
+            message_id: messageId,
+            user_id: user.id,
+            reaction
+          }
+        ])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return data;
+    } catch (error: any) {
+      console.error('Hiba a reakció hozzáadása közben:', error);
+      
+      // Ha adatbázis hiba történt, próbáljuk meg localStorage-ba menteni
+      if (error.message && (error.message.includes('does not exist') || error.code === '42P01')) {
+        // Lekérjük a meglévő reakciókat
+        const localReactions = localStorage.getItem(`message_reactions_${messageId}`);
+        const reactions = localReactions ? JSON.parse(localReactions) : [];
+        
+        // Hozzáadjuk az új reakciót
+        const newReaction = {
+          id: Date.now().toString(),
+          message_id: messageId,
+          user_id: user.id,
+          reaction,
+          created_at: new Date().toISOString()
+        };
+        
+        reactions.push(newReaction);
+        
+        // Mentjük a localStorage-ba
+        localStorage.setItem(`message_reactions_${messageId}`, JSON.stringify(reactions));
+        
+        return newReaction;
+      }
+      
+      throw error;
+    }
+  }, [user, supabase]);
 
   return {
     conversations,
@@ -458,8 +518,12 @@ export const useMessages = () => {
     sendMessage,
     markMessagesAsRead,
     createOrFindConversation,
-    refreshConversations: () => setRefreshTrigger(prev => prev + 1),
+    refreshConversations: fetchConversations,
     currentConversation: currentConversationId,
     setCurrentConversation: setCurrentConversationId,
+    deleteMessage,
+    updateMessage,
+    addReaction,
+    getMessageReactions
   };
 };

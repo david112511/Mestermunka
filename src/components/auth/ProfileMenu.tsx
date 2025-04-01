@@ -9,7 +9,8 @@ import {
   LogOut, 
   ChevronDown,
   Clock,
-  MessageCircle
+  MessageCircle,
+  Bell
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -61,65 +62,74 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 outline-none hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors">
-        <Avatar className="h-8 w-8 border border-primary/20">
-          <AvatarImage src={profile?.avatar_url || ''} alt={profile?.first_name || 'Felhasználó'} />
-          <AvatarFallback className="bg-primary/10 text-primary font-medium">{getInitials()}</AvatarFallback>
-        </Avatar>
-        <span className="text-sm font-medium hidden sm:inline-block text-gray-800">
-          {profile?.first_name || 'Felhasználó'}
-        </span>
-        <ChevronDown className="h-4 w-4 text-gray-500" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 p-1 border border-gray-200 shadow-lg rounded-lg bg-white">
-        <div className="px-3 py-2 text-sm font-medium text-gray-900 border-b border-gray-100 mb-1">
-          {profile?.first_name && profile?.last_name 
-            ? `${profile.first_name} ${profile.last_name}`
-            : 'Felhasználó'
-          }
-        </div>
-        <DropdownMenuItem asChild>
-          <Link to="/profile" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
-            <User className="mr-2 h-4 w-4 text-primary" />
-            <span>Profilom</span>
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/calendar" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
-            <Calendar className="mr-2 h-4 w-4 text-primary" />
-            <span>Naptáram</span>
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/messages" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
-            <MessageCircle className="mr-2 h-4 w-4 text-primary" />
-            <span>Üzenetek</span>
-          </Link>
-        </DropdownMenuItem>
-        {profile?.is_trainer && (
+    <div className="flex items-center gap-3">
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex items-center gap-2 outline-none hover:bg-gray-700/30 px-3 py-2 rounded-lg transition-colors">
+          <Avatar className="h-8 w-8 border border-primary/20">
+            <AvatarImage src={profile?.avatar_url || ''} alt={profile?.first_name || 'Felhasználó'} />
+            <AvatarFallback className="bg-primary/10 text-primary font-medium">{getInitials()}</AvatarFallback>
+          </Avatar>
+          <span className="text-sm font-medium hidden sm:inline-block text-white">
+            {profile?.first_name || 'Felhasználó'}
+          </span>
+          <ChevronDown className="h-4 w-4 text-gray-300" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56 p-1 border border-gray-200 shadow-lg rounded-lg bg-white">
+          <div className="px-3 py-2 text-sm font-medium text-gray-900 border-b border-gray-100 mb-1">
+            {profile?.first_name && profile?.last_name 
+              ? `${profile.first_name} ${profile.last_name}`
+              : 'Felhasználó'
+            }
+          </div>
           <DropdownMenuItem asChild>
-            <Link to="/calendar?availability=true" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
-              <Clock className="mr-2 h-4 w-4 text-primary" />
-              <span>Elérhetőségeim</span>
+            <Link to="/profile" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+              <User className="mr-2 h-4 w-4 text-primary" />
+              <span>Profilom</span>
             </Link>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild>
-          <Link to="/settings" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
-            <Settings className="mr-2 h-4 w-4 text-primary" />
-            <span>Beállítások</span>
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator className="my-1 bg-gray-100" />
-        <DropdownMenuItem 
-          onClick={handleLogout} 
-          className="px-3 py-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md my-1 focus:bg-red-50 focus:text-red-700"
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Kijelentkezés</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem asChild>
+            <Link to="/calendar" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+              <Calendar className="mr-2 h-4 w-4 text-primary" />
+              <span>Naptáram</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/messages" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+              <MessageCircle className="mr-2 h-4 w-4 text-primary" />
+              <span>Üzenetek</span>
+            </Link>
+          </DropdownMenuItem>
+          {profile?.is_trainer && (
+            <DropdownMenuItem asChild>
+              <Link to="/calendar?availability=true" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                <Clock className="mr-2 h-4 w-4 text-primary" />
+                <span>Elérhetőségeim</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem asChild>
+            <Link to="/settings" className="flex items-center w-full px-3 py-2 text-gray-800 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+              <Settings className="mr-2 h-4 w-4 text-primary" />
+              <span>Beállítások</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="my-1 bg-gray-100" />
+          <DropdownMenuItem 
+            onClick={handleLogout} 
+            className="px-3 py-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md my-1 focus:bg-red-50 focus:text-red-700"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Kijelentkezés</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Értesítések ikon */}
+      <div className="relative">
+        <button className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-700/30 hover:bg-gray-700/50 transition-colors">
+          <Bell className="h-5 w-5 text-white" />
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">3</span>
+        </button>
+      </div>
+    </div>
   );
 };

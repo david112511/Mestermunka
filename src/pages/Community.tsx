@@ -1,14 +1,35 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
 import { set } from 'date-fns';
 
+// Post típus definíciója
+interface Post {
+  id: string;
+  author_id: string;
+  content: string;
+  create_at: string;
+  media_url?: string;
+  image?: string;
+  author: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url?: string;
+    user_type: string;
+  };
+  likes: number;
+  likedBy: string[];
+  isFollowed: boolean;
+  comments: any[];
+}
+
 const Community = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [newPostContent, setNewPostContent] = useState('');
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
@@ -482,11 +503,14 @@ const Community = () => {
                         onError={() => console.log(`Failed to load image: ${post.media_url}`)}
                       />
                     )
+                  ) : post.image ? (
+                    <img
+                      src={post.image}
+                      alt="Bejegyzés képe"
+                      className="mt-4 rounded-lg w-full object-cover h-64"
+                      onError={() => console.log(`Failed to load image: ${post.image}`)}
+                    />
                   ) : null}
-                {post.image && (
-                  <img src={post.image} alt="Bejegyzés képe" className="mt-4 rounded-lg w-full object-cover h-64" />
-                )}
-
                 <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
                   <div className="flex items-center space-x-4">
                     <button
