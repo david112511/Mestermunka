@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
+import { Link } from 'react-router-dom';
 
-// 定义类型（可选，但推荐添加以提高代码健壮性）
 interface Post {
   id: string;
   author_id: string;
@@ -43,7 +43,6 @@ const Community = () => {
   const [followLoading, setFollowLoading] = useState<string | null>(null);
   const [newPostMedia, setNewPostMedia] = useState<File | null>(null);
 
-  // 获取当前用户 ID
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -58,13 +57,11 @@ const Community = () => {
     fetchUser();
   }, []);
 
-  // 获取帖子和关注状态
   useEffect(() => {
     const fetchPosts = async () => {
       if (!currentUserId) return;
 
       try {
-        // 获取用户关注的 ID 列表
         const { data: follows, error: followsError } = await supabase
           .from('follows')
           .select('followed_id')
@@ -78,7 +75,6 @@ const Community = () => {
         const followedIds = follows.map((follow) => follow.followed_id);
         console.log('Followed IDs:', followedIds);
 
-        // 获取关注的用户的最新帖子（最近 24 小时）
         const { data: followedRecentPosts, error: followedRecentError } = await supabase
           .from('posts')
           .select(`
@@ -88,14 +84,13 @@ const Community = () => {
             media_url
           `)
           .in('author_id', followedIds)
-          .gte('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 最近 24 小时
+          .gte('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
           .order('create_at', { ascending: false })
-          .limit(6); // 限制为 6 条
+          .limit(6);
 
         if (followedRecentError) throw followedRecentError;
 
-        // 获取关注的用户的热门历史帖子（24 小时前，按点赞排序）
-        const { data: followedTopPosts, error: followedTopError } = await supabase
+        const { data: followedTopPostsRaw, error: followedTopError } = await supabase
           .from('posts')
           .select(`
             *,
@@ -104,13 +99,12 @@ const Community = () => {
             media_url
           `)
           .in('author_id', followedIds)
-          .lt('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 24 小时前
-          .order('likes', { ascending: false }) // 按点赞数排序
-          .limit(2); // 限制为 2 条
+          .lt('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .order('create_at', { ascending: false })
+          .limit(10);
 
         if (followedTopError) throw followedTopError;
 
-        // 获取其他用户的推荐帖子（按时间或点赞排序）
         const { data: otherPosts, error: otherError } = await supabase
           .from('posts')
           .select(`
@@ -119,35 +113,45 @@ const Community = () => {
             comments(*, author:profiles(id, first_name, last_name), created_at),
             media_url
           `)
-          .not('author_id', 'in', `(${followedIds.join(',')})`) // 排除关注用户
-          .order('create_at', { ascending: false }) // 按时间排序
-          .limit(4); // 限制为 4 条
+          .not('author_id', 'in', `(${followedIds.join(',')})`)
+          .order('create_at', { ascending: false })
+          .limit(4);
 
         if (otherError) throw otherError;
 
-        // 合并所有帖子
-        const allPosts = [...(followedRecentPosts || []), ...(followedTopPosts || []), ...(otherPosts || [])];
+        const { data: likes, error: likesError } = await supabase
+          .from('likes')
+          .select('post_id, user_id');
 
-        // 获取点赞数据
-        const { data: likes, error: likesError } = await supabase.from('likes').select('post_id, user_id');
         if (likesError) throw likesError;
 
-        // 添加 likes 和 isFollowed 属性
-        const postsWithLikesAndFollows = allPosts.map((post: any) => ({
-          ...post,
-          likes: likes.filter((like: any) => like.post_id === post.id).length,
-          likedBy: likes.filter((like: any) => like.post_id === post.id).map((like: any) => like.user_id),
-          isFollowed: followedIds.includes(post.author_id),
-        }));
+        const addLikesToPosts = (posts: any[]) =>
+          posts.map((post) => ({
+            ...post,
+            likes: likes.filter((like) => like.post_id === post.id).length,
+            likedBy: likes.filter((like) => like.post_id === post.id).map((like) => like.user_id),
+            isFollowed: followedIds.includes(post.author_id),
+          }));
 
-        // 自定义排序：关注用户的最新帖子优先
-        const sortedPosts = postsWithLikesAndFollows.sort((a, b) => {
+        const followedRecentPostsWithLikes = addLikesToPosts(followedRecentPosts || []);
+        const followedTopPostsWithLikes = addLikesToPosts(followedTopPostsRaw || [])
+          .sort((a, b) => b.likes - a.likes)
+          .slice(0, 2);
+        const otherPostsWithLikes = addLikesToPosts(otherPosts || []);
+
+        const allPosts = [
+          ...followedRecentPostsWithLikes,
+          ...followedTopPostsWithLikes,
+          ...otherPostsWithLikes,
+        ];
+
+        const sortedPosts = allPosts.sort((a, b) => {
           const isAFollowed = followedIds.includes(a.author_id);
           const isBFollowed = followedIds.includes(b.author_id);
 
-          if (isAFollowed && !isBFollowed) return -1; // 关注用户优先
+          if (isAFollowed && !isBFollowed) return -1;
           if (!isAFollowed && isBFollowed) return 1;
-          return new Date(b.create_at).getTime() - new Date(a.create_at).getTime(); // 时间排序
+          return new Date(b.create_at).getTime() - new Date(a.create_at).getTime();
         });
 
         setPosts(sortedPosts);
@@ -164,7 +168,6 @@ const Community = () => {
     : posts.filter((post) => post.author.user_type === 'trainer');
   console.log('Filtered posts:', filteredPosts);
 
-  // 点赞处理
   const handleLike = async (id: string) => {
     if (!currentUserId) {
       console.error('User not logged in');
@@ -191,7 +194,7 @@ const Community = () => {
           console.error('Error inserting like:', insertError.message);
           throw insertError;
         }
-        setPosts(posts.map((p: any) =>
+        setPosts(posts.map((p) =>
           p.id === id
             ? { ...p, likes: p.likes + 1, likedBy: [...p.likedBy, currentUserId] }
             : p
@@ -206,9 +209,9 @@ const Community = () => {
           console.error('Error deleting like:', deleteError.message);
           throw deleteError;
         }
-        setPosts(posts.map((p: any) =>
+        setPosts(posts.map((p) =>
           p.id === id
-            ? { ...p, likes: p.likes - 1, likedBy: p.likedBy.filter((uid: string) => uid !== currentUserId) }
+            ? { ...p, likes: p.likes - 1, likedBy: p.likedBy.filter((uid) => uid !== currentUserId) }
             : p
         ));
       }
@@ -217,7 +220,6 @@ const Community = () => {
     }
   };
 
-  // 删除帖子
   const handleDeletePost = async (id: string) => {
     if (!currentUserId) {
       setDeleteError('Jelentkezz be a törléshez!');
@@ -240,7 +242,7 @@ const Community = () => {
         throw error;
       }
 
-      setPosts(posts.filter((p: any) => p.id !== id));
+      setPosts(posts.filter((p) => p.id !== id));
     } catch (error) {
       setDeleteError('Hiba történt a bejegyzés törlése során. Kérjük, próbáld újra!');
       console.error('Error deleting post:', error.message);
@@ -249,7 +251,6 @@ const Community = () => {
     }
   };
 
-  // 添加评论
   const handleComment = async (id: string) => {
     const comment = commentInputs[id];
     if (!comment || !comment.trim() || !currentUserId) {
@@ -295,7 +296,6 @@ const Community = () => {
     }
   };
 
-  // 添加新帖子
   const handleAddPost = async () => {
     if (!newPostContent || !newPostContent.trim() || !currentUserId) {
       console.log('Cannot add post:', { newPostContent, currentUserId });
@@ -374,7 +374,6 @@ const Community = () => {
     }
   };
 
-  // 切换评论区显示/隐藏
   const toggleCommentSection = (postId: string) => {
     setOpenCommentSections((prev) => ({
       ...prev,
@@ -382,7 +381,6 @@ const Community = () => {
     }));
   };
 
-  // 关注/取消关注处理
   const handleFollow = async (postId: string, authorId: string, isFollowed: boolean) => {
     if (!currentUserId) {
       console.error('User not logged in');
@@ -403,7 +401,7 @@ const Community = () => {
           throw error;
         }
 
-        setPosts(posts.map((p: any) =>
+        setPosts(posts.map((p) =>
           p.id === postId ? { ...p, isFollowed: false } : p
         ));
       } else {
@@ -416,7 +414,7 @@ const Community = () => {
           throw error;
         }
 
-        setPosts(posts.map((p: any) =>
+        setPosts(posts.map((p) =>
           p.id === postId ? { ...p, isFollowed: true } : p
         ));
       }
@@ -436,7 +434,6 @@ const Community = () => {
           <p className="mt-4 text-xl text-gray-600">Kapcsolódj, ossz meg és fejlődj fitness közösségünkkel</p>
         </div>
 
-        {/* 新增帖子表单 */}
         <div className="mt-8">
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900">Új Bejegyzés</h2>
@@ -465,7 +462,6 @@ const Community = () => {
           </div>
         </div>
 
-        {/* 搜索和筛选 */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -493,18 +489,20 @@ const Community = () => {
           </div>
         </div>
 
-        {/* 帖子列表 */}
         <div className="mt-8 space-y-6">
           {filteredPosts.length > 0 ? (
             filteredPosts.map((post) => (
               <div key={post.id} className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <img
-                      src={post.author.avatar_url || 'https://via.placeholder.com/150'}
-                      alt={`${post.author.first_name} ${post.author.last_name}`}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
+                    {/* 修改跳转路径为 personal-profile */}
+                    <Link to={`/personal-profile/${post.author_id}`} className="block">
+                      <img
+                        src={post.author.avatar_url || 'https://via.placeholder.com/150'}
+                        alt={`${post.author.first_name} ${post.author.last_name}`}
+                        className="w-12 h-12 rounded-full object-cover hover:opacity-80 transition-opacity"
+                      />
+                    </Link>
                     <div className="ml-4">
                       <div className="flex items-center">
                         <h3 className="font-semibold text-gray-900">
@@ -554,7 +552,6 @@ const Community = () => {
                     />
                   )
                 ) : null}
-                
 
                 <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
                   <div className="flex items-center space-x-4">
@@ -602,8 +599,8 @@ const Community = () => {
                     <div className="max-h-60 overflow-y-auto space-y-3">
                       {post.comments && post.comments.length > 0 ? (
                         post.comments
-                          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                          .map((comment: any) => (
+                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                          .map((comment) => (
                             <div
                               key={comment.id}
                               className="border-b border-gray-200 pb-3 last:border-b-0"

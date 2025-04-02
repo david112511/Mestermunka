@@ -29,7 +29,7 @@ function App() {
               <Route path="/community" element={<Community />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/profile" element={<Profile />} />
-              <Route path="/profile/:userId" element={<Profile />} />
+              <Route path="/personal-profile/:userId" element={<PersonalProfile />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="*" element={<NotFound />} />
