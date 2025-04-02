@@ -1,37 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
-import { set } from 'date-fns';
 
-// Post típus definíciója
+// 定义类型（可选，但推荐添加以提高代码健壮性）
 interface Post {
   id: string;
   author_id: string;
   content: string;
   create_at: string;
-  media_url?: string;
-  image?: string;
+  media_url: string | null;
   author: {
     id: string;
     first_name: string;
     last_name: string;
-    avatar_url?: string;
+    avatar_url: string | null;
     user_type: string;
   };
+  comments: Array<{
+    id: string;
+    content: string;
+    created_at: string;
+    author: { first_name: string; last_name: string };
+  }>;
   likes: number;
   likedBy: string[];
   isFollowed: boolean;
-  comments: any[];
 }
 
 const Community = () => {
-  const [activeTab, setActiveTab] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [commentInputs, setCommentInputs] = useState({});
+  const [activeTab, setActiveTab] = useState<'all' | 'trainer'>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [posts, setPosts] = useState<Post[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [newPostContent, setNewPostContent] = useState('');
+  const [newPostContent, setNewPostContent] = useState<string>('');
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [openCommentSections, setOpenCommentSections] = useState<{ [key: string]: boolean }>({});
@@ -58,8 +61,25 @@ const Community = () => {
   // 获取帖子和关注状态
   useEffect(() => {
     const fetchPosts = async () => {
+      if (!currentUserId) return;
+
       try {
-        const { data: posts, error } = await supabase
+        // 获取用户关注的 ID 列表
+        const { data: follows, error: followsError } = await supabase
+          .from('follows')
+          .select('followed_id')
+          .eq('follower_id', currentUserId);
+
+        if (followsError) {
+          console.error('Error fetching follows:', followsError);
+          throw followsError;
+        }
+
+        const followedIds = follows.map((follow) => follow.followed_id);
+        console.log('Followed IDs:', followedIds);
+
+        // 获取关注的用户的最新帖子（最近 24 小时）
+        const { data: followedRecentPosts, error: followedRecentError } = await supabase
           .from('posts')
           .select(`
             *,
@@ -67,47 +87,81 @@ const Community = () => {
             comments(*, author:profiles(id, first_name, last_name), created_at),
             media_url
           `)
-          .order('create_at', { ascending: false });
-  
-        if (error) {
-          console.error('Error fetching posts details:', error);
-          throw error;
-        }
-  
+          .in('author_id', followedIds)
+          .gte('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 最近 24 小时
+          .order('create_at', { ascending: false })
+          .limit(6); // 限制为 6 条
+
+        if (followedRecentError) throw followedRecentError;
+
+        // 获取关注的用户的热门历史帖子（24 小时前，按点赞排序）
+        const { data: followedTopPosts, error: followedTopError } = await supabase
+          .from('posts')
+          .select(`
+            *,
+            author:profiles(id, first_name, last_name, avatar_url, user_type),
+            comments(*, author:profiles(id, first_name, last_name), created_at),
+            media_url
+          `)
+          .in('author_id', followedIds)
+          .lt('create_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 24 小时前
+          .order('likes', { ascending: false }) // 按点赞数排序
+          .limit(2); // 限制为 2 条
+
+        if (followedTopError) throw followedTopError;
+
+        // 获取其他用户的推荐帖子（按时间或点赞排序）
+        const { data: otherPosts, error: otherError } = await supabase
+          .from('posts')
+          .select(`
+            *,
+            author:profiles(id, first_name, last_name, avatar_url, user_type),
+            comments(*, author:profiles(id, first_name, last_name), created_at),
+            media_url
+          `)
+          .not('author_id', 'in', `(${followedIds.join(',')})`) // 排除关注用户
+          .order('create_at', { ascending: false }) // 按时间排序
+          .limit(4); // 限制为 4 条
+
+        if (otherError) throw otherError;
+
+        // 合并所有帖子
+        const allPosts = [...(followedRecentPosts || []), ...(followedTopPosts || []), ...(otherPosts || [])];
+
+        // 获取点赞数据
         const { data: likes, error: likesError } = await supabase.from('likes').select('post_id, user_id');
         if (likesError) throw likesError;
-  
-        let follows: { follower_id: string; followed_id: string }[] = [];
-        if (currentUserId) {
-          const { data: followsData, error: followsError } = await supabase
-            .from('follows')
-            .select('follower_id, followed_id')
-            .eq('follower_id', currentUserId);
-          if (followsError) throw followsError;
-          follows = followsData || [];
-        }
-  
-        const postsWithLikesAndFollows = posts.map(post => ({
+
+        // 添加 likes 和 isFollowed 属性
+        const postsWithLikesAndFollows = allPosts.map((post: any) => ({
           ...post,
-          likes: likes.filter(like => like.post_id === post.id).length,
-          likedBy: likes.filter(like => like.post_id === post.id).map(like => like.user_id),
-          isFollowed: currentUserId
-            ? follows.some(follow => follow.followed_id === post.author_id)
-            : false,
+          likes: likes.filter((like: any) => like.post_id === post.id).length,
+          likedBy: likes.filter((like: any) => like.post_id === post.id).map((like: any) => like.user_id),
+          isFollowed: followedIds.includes(post.author_id),
         }));
-  
-        setPosts(postsWithLikesAndFollows);
-        console.log('Loaded posts:', postsWithLikesAndFollows);
+
+        // 自定义排序：关注用户的最新帖子优先
+        const sortedPosts = postsWithLikesAndFollows.sort((a, b) => {
+          const isAFollowed = followedIds.includes(a.author_id);
+          const isBFollowed = followedIds.includes(b.author_id);
+
+          if (isAFollowed && !isBFollowed) return -1; // 关注用户优先
+          if (!isAFollowed && isBFollowed) return 1;
+          return new Date(b.create_at).getTime() - new Date(a.create_at).getTime(); // 时间排序
+        });
+
+        setPosts(sortedPosts);
+        console.log('Loaded posts:', sortedPosts);
       } catch (error) {
-        console.error('Error fetching posts:', error.message);
+        console.error('Error fetching posts:', (error as Error).message);
       }
     };
     fetchPosts();
-  }, [currentUserId]); // 依赖 currentUserId，确保用户登录状态变化时重新加载
+  }, [currentUserId]);
 
   const filteredPosts = activeTab === 'all'
     ? posts
-    : posts.filter(post => post.author.user_type === 'trainer');
+    : posts.filter((post) => post.author.user_type === 'trainer');
   console.log('Filtered posts:', filteredPosts);
 
   // 点赞处理
@@ -116,19 +170,19 @@ const Community = () => {
       console.error('User not logged in');
       return;
     }
-  
+
     try {
       const { data: existingLike, error: selectError } = await supabase
         .from('likes')
         .select('*')
         .eq('post_id', id)
         .eq('user_id', currentUserId);
-  
+
       if (selectError) {
         console.error('Error checking existing like:', selectError.message);
         throw selectError;
       }
-  
+
       if (existingLike.length === 0) {
         const { error: insertError } = await supabase
           .from('likes')
@@ -231,7 +285,7 @@ const Community = () => {
       if (fetchError) throw fetchError;
 
       const { data: likes } = await supabase.from('likes').select('user_id').eq('post_id', id);
-      setPosts(posts.map(p => p.id === id ? { ...post, likes: likes.length, likedBy: likes.map(l => l.user_id) } : p));
+      setPosts(posts.map((p) => (p.id === id ? { ...post, likes: likes.length, likedBy: likes.map((l) => l.user_id) } : p)));
       setCommentInputs({ ...commentInputs, [id]: '' });
     } catch (error) {
       setCommentError('Hiba történt a hozzászólás hozzáadása során. Kérjük, próbáld újra!');
@@ -247,38 +301,38 @@ const Community = () => {
       console.log('Cannot add post:', { newPostContent, currentUserId });
       return;
     }
-  
+
     try {
       let mediaUrl: string | null = null;
-  
+
       if (newPostMedia) {
-        const originalFileName = newPostMedia.name; // 获取原始文件名
-        const fileExt = originalFileName.split('.').pop(); // 获取扩展名
-        const baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.')); // 获取文件名（不含扩展名）
-        const uniqueFileName = `${baseName}-${currentUserId}-${new Date().getTime()}.${fileExt}`; // 添加用户 ID 和时间戳
+        const originalFileName = newPostMedia.name;
+        const fileExt = originalFileName.split('.').pop();
+        const baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+        const uniqueFileName = `${baseName}-${currentUserId}-${new Date().getTime()}.${fileExt}`;
         console.log('Uploading media:', { fileName: uniqueFileName, fileSize: newPostMedia.size });
-  
+
         const { data, error: uploadError } = await supabase.storage
           .from('post-media')
           .upload(uniqueFileName, newPostMedia);
-  
+
         if (uploadError) {
           console.error('Error uploading media:', uploadError.message);
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
-  
+
         const { data: publicUrlData } = supabase.storage
           .from('post-media')
           .getPublicUrl(uniqueFileName);
-  
+
         if (!publicUrlData) {
           throw new Error('Failed to get public URL');
         }
-  
+
         mediaUrl = publicUrlData.publicUrl;
         console.log('Media uploaded successfully:', mediaUrl);
       }
-  
+
       const { data: newPost, error } = await supabase
         .from('posts')
         .insert({
@@ -289,28 +343,28 @@ const Community = () => {
         })
         .select('*, author:profiles(id, first_name, last_name, avatar_url, user_type), media_url')
         .single();
-  
+
       if (error) {
         console.error('Error inserting post:', error.message);
         throw error;
       }
-  
+
       console.log('New post inserted:', newPost);
-  
+
       const { data: likes } = await supabase.from('likes').select('post_id, user_id');
       const { data: follows } = await supabase
         .from('follows')
         .select('follower_id, followed_id')
         .eq('follower_id', currentUserId);
-  
-      const newPostWithLikesAndFollows: Post = {
+
+      const newPostWithLikesAndFollows = {
         ...newPost,
         likes: 0,
         likedBy: [],
-        isFollowed: follows.some((follow) => follow.followed_id === newPost.author_id),
+        isFollowed: follows.some((follow: any) => follow.followed_id === newPost.author_id),
         comments: [],
       };
-  
+
       console.log('New post with likes and follows:', newPostWithLikesAndFollows);
       setPosts([newPostWithLikesAndFollows, ...posts]);
       setNewPostContent('');
@@ -322,7 +376,7 @@ const Community = () => {
 
   // 切换评论区显示/隐藏
   const toggleCommentSection = (postId: string) => {
-    setOpenCommentSections(prev => ({
+    setOpenCommentSections((prev) => ({
       ...prev,
       [postId]: !prev[postId],
     }));
@@ -338,7 +392,6 @@ const Community = () => {
     setFollowLoading(postId);
     try {
       if (isFollowed) {
-        // 取消关注
         const { error } = await supabase
           .from('follows')
           .delete()
@@ -354,7 +407,6 @@ const Community = () => {
           p.id === postId ? { ...p, isFollowed: false } : p
         ));
       } else {
-        // 关注
         const { error } = await supabase
           .from('follows')
           .insert({ follower_id: currentUserId, followed_id: authorId });
@@ -396,12 +448,12 @@ const Community = () => {
               rows={3}
             />
             <input
-              type='file'
-              accept='image/*, video/*'
-              className='mt-2'
-              onChange={(e)=>{
+              type="file"
+              accept="image/*, video/*"
+              className="mt-2"
+              onChange={(e) => {
                 const file = e.target.files?.[0];
-                if(file) setNewPostMedia(file);
+                if (file) setNewPostMedia(file);
               }}
             />
             <button
@@ -448,12 +500,11 @@ const Community = () => {
               <div key={post.id} className="bg-white rounded-xl shadow-sm p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    
                     <img
                       src={post.author.avatar_url || 'https://via.placeholder.com/150'}
                       alt={`${post.author.first_name} ${post.author.last_name}`}
                       className="w-12 h-12 rounded-full object-cover"
-                    />                 
+                    />
                     <div className="ml-4">
                       <div className="flex items-center">
                         <h3 className="font-semibold text-gray-900">
@@ -470,7 +521,6 @@ const Community = () => {
                       </p>
                     </div>
                   </div>
-                  
                   <div className="flex items-center space-x-2">
                     {post.author_id === currentUserId && (
                       <button
@@ -487,30 +537,25 @@ const Community = () => {
                   </div>
                 </div>
                 <p className="mt-4 text-gray-700">{post.content}</p>
-                  {post.media_url ? (
-                    post.media_url.includes('.mp4') || post.media_url.includes('.mov') ? (
-                      <video
-                        src={post.media_url}
-                        controls
-                        className="mt-4 rounded-lg w-full object-cover h-64"
-                        onError={() => console.log(`Failed to load video: ${post.media_url}`)}
-                      />
-                    ) : (
-                     <img
-                        src={post.media_url}
-                        alt="Bejegyzés képe"
-                        className="mt-4 rounded-lg w-full object-cover h-64"
-                        onError={() => console.log(`Failed to load image: ${post.media_url}`)}
-                      />
-                    )
-                  ) : post.image ? (
+                {post.media_url ? (
+                  post.media_url.includes('.mp4') || post.media_url.includes('.mov') ? (
+                    <video
+                      src={post.media_url}
+                      controls
+                      className="mt-4 rounded-lg w-full object-cover h-64"
+                      onError={() => console.log(`Failed to load video: ${post.media_url}`)}
+                    />
+                  ) : (
                     <img
-                      src={post.image}
+                      src={post.media_url}
                       alt="Bejegyzés képe"
                       className="mt-4 rounded-lg w-full object-cover h-64"
-                      onError={() => console.log(`Failed to load image: ${post.image}`)}
+                      onError={() => console.log(`Failed to load image: ${post.media_url}`)}
                     />
-                  ) : null}
+                  )
+                ) : null}
+                
+
                 <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
                   <div className="flex items-center space-x-4">
                     <button
@@ -551,12 +596,9 @@ const Community = () => {
                   )}
                 </div>
 
-                {/* 评论区：通过点击评论图标显示/隐藏 */}
                 {openCommentSections[post.id] && (
                   <div className="mt-4 bg-white rounded-xl shadow-sm p-4">
                     <h4 className="text-lg font-semibold text-gray-900 mb-3">Hozzászólások</h4>
-
-                    {/* 评论列表：固定高度，超出滚动 */}
                     <div className="max-h-60 overflow-y-auto space-y-3">
                       {post.comments && post.comments.length > 0 ? (
                         post.comments
@@ -587,8 +629,6 @@ const Community = () => {
                         <p className="text-gray-500 text-center py-4">Még nincs hozzászólás, legyél az első!</p>
                       )}
                     </div>
-
-                    {/* 添加评论 */}
                     <div className="mt-4">
                       <div className="flex gap-3">
                         <input
