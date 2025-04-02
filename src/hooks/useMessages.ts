@@ -57,85 +57,69 @@ export const useMessages = () => {
     setError(null);
     
     try {
-      // Közvetlenül a conversations táblából kérdezzük le az adatokat
-      const { data: allConversations, error: conversationsError } = await supabase
+      // 1. Lekérdezzük a felhasználó beszélgetés-azonosítóit
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id')
+        .eq('user_id', user.id);
+        
+      if (participantsError) {
+        console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', participantsError);
+        setError('Nem sikerült betölteni a beszélgetéseket.');
+        setConversationsLoading(false);
+        return;
+      }
+      
+      if (!participantsData || participantsData.length === 0) {
+        setConversations([]);
+        setConversationsLoading(false);
+        return;
+      }
+      
+      // Kigyűjtjük a beszélgetés azonosítókat
+      const conversationIds = participantsData.map(p => p.conversation_id);
+      
+      // 2. Lekérdezzük a beszélgetéseket az azonosítók alapján
+      const { data: userConversations, error: conversationsError } = await supabase
         .from('conversations')
         .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(50);
-
+        .in('id', conversationIds)
+        .order('updated_at', { ascending: false });
+        
       if (conversationsError) {
         console.error('Hiba a beszélgetések lekérdezésekor:', conversationsError);
         setError('Nem sikerült betölteni a beszélgetéseket.');
         setConversationsLoading(false);
         return;
       }
-
-      if (!allConversations || allConversations.length === 0) {
+      
+      if (!userConversations || userConversations.length === 0) {
         setConversations([]);
         setConversationsLoading(false);
         return;
       }
       
-      // Azonosítjuk azokat a beszélgetéseket, amelyekben a felhasználó részt vesz
-      let userConversationIds: string[] = [];
-      
-      try {
-        // Lekérdezzük a conversation_participants táblából a felhasználó beszélgetéseit
-        const { data: participantsData, error: participantsError } = await supabase
-          .from('conversation_participants')
-          .select('conversation_id')
-          .eq('user_id', user.id)
-          .limit(100);
-          
-        if (participantsError) {
-          console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', participantsError);
-        } else if (participantsData && participantsData.length > 0) {
-          userConversationIds = participantsData.map(p => p.conversation_id);
-        }
-      } catch (error) {
-        console.error('Hiba a beszélgetés résztvevők lekérdezésekor:', error);
-      }
-      
-      // Ha nem találtunk beszélgetéseket, akkor minden beszélgetést megjelenítünk
-      // Ez nem ideális, de jobb, mint ha semmit sem jelenítenénk meg
-      const conversationsToProcess = userConversationIds.length > 0
-        ? allConversations.filter(c => userConversationIds.includes(c.id))
-        : allConversations;
-      
-      // Lekérdezzük a résztvevőket minden beszélgetéshez
+      // 3. Minden beszélgetéshez lekérdezzük a résztvevőket
       const processedConversations = await Promise.all(
-        conversationsToProcess.map(async (conversation) => {
+        userConversations.map(async (conversation) => {
           try {
-            // Lekérdezzük a résztvevőket
-            const { data: participants, error: participantsError } = await supabase
-              .from('conversation_participants')
-              .select('user_id')
-              .eq('conversation_id', conversation.id);
+            // 3.1 Közvetlenül a Supabase REST API-t használjuk az RLS helyett
+            const { data: allParticipants, error: allParticipantsError } = await supabase.rpc(
+              'get_conversation_participants_for_user',
+              { user_id_param: user.id, conversation_id_param: conversation.id }
+            );
               
-            if (participantsError) {
-              console.error('Hiba a résztvevők lekérdezésekor:', participantsError);
-              return conversation;
+            if (allParticipantsError) {
+              console.error('Hiba a résztvevők lekérdezésekor:', allParticipantsError);
+              return {
+                ...conversation,
+                participants: [],
+                last_message: undefined,
+                unread_count: 0
+              };
             }
             
-            // Lekérdezzük a résztvevők profiladatait
-            const participantIds = participants?.map(p => p.user_id) || [];
-            
-            if (participantIds.length === 0) {
-              return conversation;
-            }
-            
-            const { data: profiles, error: profilesError } = await supabase
-              .from('profiles')
-              .select('id, first_name, last_name, avatar_url')
-              .in('id', participantIds);
-              
-            if (profilesError) {
-              console.error('Hiba a profilok lekérdezésekor:', profilesError);
-              return conversation;
-            }
-            
-            // Lekérdezzük az utolsó üzenetet
+            // 3.3 Lekérdezzük az utolsó üzenetet
             const { data: lastMessages, error: lastMessageError } = await supabase
               .from('messages')
               .select('content, created_at, sender_id')
@@ -147,7 +131,7 @@ export const useMessages = () => {
               console.error('Hiba az utolsó üzenet lekérdezésekor:', lastMessageError);
             }
             
-            // Lekérdezzük az olvasatlan üzenetek számát
+            // 3.4 Lekérdezzük az olvasatlan üzenetek számát
             const { data: unreadMessages, error: unreadError } = await supabase
               .from('messages')
               .select('id')
@@ -161,7 +145,7 @@ export const useMessages = () => {
             
             return {
               ...conversation,
-              participants: profiles || [],
+              participants: allParticipants || [],
               last_message: lastMessages && lastMessages.length > 0 ? lastMessages[0] : undefined,
               unread_count: unreadMessages ? unreadMessages.length : 0
             };
