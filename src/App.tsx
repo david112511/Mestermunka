@@ -12,6 +12,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Profile from "./pages/Profile";
 import Calendar from "./pages/Calendar";
 import Messages from "./pages/Messages";
+import PersonalProfile from "./pages/Personal_profile";
 
 const queryClient = new QueryClient();
 

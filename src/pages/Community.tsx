@@ -429,10 +429,7 @@ const Community = () => {
     <div className="min-h-screen bg-gray-50">
       <Navigation />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900">Közösségi Fal</h1>
-          <p className="mt-4 text-xl text-gray-600">Kapcsolódj, ossz meg és fejlődj fitness közösségünkkel</p>
-        </div>
+        
 
         <div className="mt-8">
           <div className="bg-white rounded-xl shadow-sm p-6">
