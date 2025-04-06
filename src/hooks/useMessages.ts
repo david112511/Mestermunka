@@ -24,6 +24,8 @@ export interface Message {
     last_name: string;
     avatar_url: string;
   };
+  reply_to_id?: string;
+  reply_to_content?: string;
 }
 
 export interface Conversation {
@@ -420,6 +422,10 @@ export const useMessages = () => {
       name?: string;
       size?: number;
       thumbnailUrl?: string;
+    },
+    replyData?: {
+      reply_to_id: string;
+      reply_to_content: string;
     }
   ) => {
     if (!user) return;
@@ -436,7 +442,9 @@ export const useMessages = () => {
         file_type: fileData?.type || null,
         file_name: fileData?.name || null,
         file_size: fileData?.size || null,
-        thumbnail_url: fileData?.thumbnailUrl || null
+        thumbnail_url: fileData?.thumbnailUrl || null,
+        reply_to_id: replyData?.reply_to_id || null,
+        reply_to_content: replyData?.reply_to_content || null
       };
       
       const { data, error } = await supabase
@@ -724,38 +732,48 @@ export const useMessages = () => {
     
     console.log(`Feliratkozás a message_reactions:${messageId} csatornára...`);
     
-    // Csatorna létrehozása és feliratkozás
-    const channel = supabase
-      .channel(`message_reactions:${messageId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_reactions',
-          filter: `message_id=eq.${messageId}`
-        },
-        async (payload) => {
-          console.log('Reakció esemény:', payload);
+    // Ellenőrizzük, hogy van-e már ilyen csatorna
+    try {
+      // Csatorna létrehozása és feliratkozás
+      const channel = supabase
+        .channel(`message_reactions:${messageId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'message_reactions',
+            filter: `message_id=eq.${messageId}`
+          },
+          async (payload) => {
+            console.log('Reakció esemény:', payload);
+            
+            try {
+              // Lekérjük az összes reakciót az üzenethez
+              const reactions = await getMessageReactions(messageId);
+              console.log(`Frissített reakciók a(z) ${messageId} üzenethez:`, reactions);
+              
+              // Visszahívjuk a callback függvényt az új reakciókkal
+              callback(reactions);
+            } catch (error) {
+              console.error(`Hiba a reakciók lekérdezésekor a(z) ${messageId} üzenethez:`, error);
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log(`Feliratkozás állapota a message_reactions:${messageId} csatornára:`, status);
           
-          // Lekérjük az összes reakciót az üzenethez
-          const reactions = await getMessageReactions(messageId);
-          console.log(`Frissített reakciók a(z) ${messageId} üzenethez:`, reactions);
-          
-          // Visszahívjuk a callback függvényt az új reakciókkal
-          callback(reactions);
-        }
-      )
-      .subscribe((status) => {
-        console.log(`Feliratkozás állapota a message_reactions:${messageId} csatornára:`, status);
-        
-        // Ellenőrizzük, hogy a csatorna sikeresen feliratkozott-e
-        if (status !== 'SUBSCRIBED') {
-          console.error(`Hiba a feliratkozáskor a message_reactions:${messageId} csatornára. Állapot:`, status);
-        }
-      });
-    
-    return channel;
+          // Ellenőrizzük, hogy a csatorna sikeresen feliratkozott-e
+          if (status === 'CHANNEL_ERROR') {
+            console.error(`Hiba a feliratkozáskor a message_reactions:${messageId} csatornára. Állapot:`, status);
+          }
+        });
+      
+      return channel;
+    } catch (error) {
+      console.error(`Hiba a message_reactions:${messageId} csatorna létrehozásakor:`, error);
+      return null;
+    }
   }, [getMessageReactions]);
 
   // Feliratkozás a beszélgetések frissítéseire

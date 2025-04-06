@@ -49,7 +49,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import { Switch } from '@/components/ui/switch';
 import AppointmentBooking from '@/components/AppointmentBooking';
@@ -883,7 +882,6 @@ const Profile = () => {
   if (profileLoading || trainerLoading || locationsLoading || (viewingOtherProfile && otherUserLoading)) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navigation />
         <div className="container mx-auto py-8 px-4">
           <div className="flex flex-col items-center justify-center min-h-[60vh]">
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -902,7 +900,6 @@ const Profile = () => {
 
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navigation />
         <div className="container mx-auto py-8 px-4">
           <div className="mb-8">
             <Button 
@@ -1168,9 +1165,7 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
-      <Navigation />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Profilom</h1>
           <p className="mt-2 text-lg text-gray-600">Kezeld személyes adataidat és beállításaidat</p>

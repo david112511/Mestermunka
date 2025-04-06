@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { CheckCircle, ArrowRight, ChevronRight, Users, Calendar, MessageCircle, Dumbbell, Award, Star, Heart, Clock, Zap, Trophy, Utensils, Target, Flame, Sparkles, Play, ArrowDown, Salad, Headphones, Smile, BarChart, ChevronDown } from 'lucide-react';
 import { useNavigate } from "react-router-dom";
-import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 
 const Index = () => {
@@ -92,8 +91,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navigation />
-
       {/* Hero Section - Asymmetric Design with Video */}
       <section className="relative min-h-screen overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
         {/* Animated Background Elements */}

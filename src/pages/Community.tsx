@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import Navigation from '../components/Navigation';
 import { Link } from 'react-router-dom';
 
 interface Post {
@@ -356,7 +355,6 @@ const Community = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
         {/* 添加新帖子按钮 */}
         {currentUserId && (

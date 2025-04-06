@@ -97,7 +97,7 @@ const Navigation = () => {
                 <div className="flex items-center space-x-4">
                   <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" className="border-gray-600 text-gray-200 hover:bg-gray-700/50 hover:text-white">
+                      <Button variant="outline" className="border-gray-600 text-white bg-gray-700/50 hover:bg-gray-700/70 hover:border-primary hover:shadow-md hover:shadow-primary/20 transition-all duration-200">
                         <User className="mr-2 h-4 w-4" />
                         Bejelentkezés
                       </Button>
@@ -183,7 +183,7 @@ const Navigation = () => {
             <div className="px-3 py-2 space-y-2">
               <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full border-gray-600 text-gray-200 hover:bg-gray-700/50 hover:text-white">
+                  <Button variant="outline" className="w-full border-gray-600 text-white bg-gray-700/50 hover:bg-gray-700/70 hover:border-primary hover:shadow-md hover:shadow-primary/20 transition-all duration-200">
                     <User className="mr-2 h-4 w-4" />
                     Bejelentkezés
                   </Button>

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, Star, MapPin, Clock, Users, Award, TrendingUp, ChevronRight, ArrowRight, Sparkles, Dumbbell, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import CoachSearchBar from '../components/coaches/CoachSearchBar';
 import CoachFilters from '../components/coaches/CoachFilters';
@@ -117,10 +116,8 @@ const Coaches = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <Navigation />
-      
       {/* Hero Section - Asymmetric design with floating elements */}
-      <section className="relative pt-24 pb-16 overflow-hidden">
+      <section className="relative pt-4 pb-16 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent z-0"></div>
         
         {/* Floating elements */}

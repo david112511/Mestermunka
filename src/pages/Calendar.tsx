@@ -18,7 +18,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/lib/supabase';
-import Navigation from '@/components/Navigation';
 import { useSearchParams } from 'react-router-dom';
 import TrainerAvailabilityCalendar from '@/components/TrainerAvailabilityCalendar';
 import { Switch } from "@/components/ui/switch";
@@ -701,7 +700,6 @@ const resetNewEvent = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
       <main className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 pt-24">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Naptár</h1>

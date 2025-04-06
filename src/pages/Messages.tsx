@@ -1,10 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { 
+  useState, 
+  useEffect, 
+  useRef, 
+  useCallback, 
+  memo,
+  useMemo
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMessages, Conversation, Message } from '@/hooks/useMessages';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
-import Navigation from '@/components/Navigation';
 import FileUploader from '@/components/FileUploader';
 import EmojiPicker from '@/components/EmojiPicker';
 import { 
@@ -20,25 +26,16 @@ import {
   CheckCheck,
   Trash,
   MoreVertical,
-  Calendar,
-  Image,
   Edit,
   Smile,
-  ThumbsUp,
-  Heart,
-  Frown,
-  Angry,
   Plus,
   X,
   Paperclip,
-  File,
-  FileText,
-  Film,
   Reply,
   Copy,
   MoreHorizontal
 } from 'lucide-react';
-import { format, isToday, isYesterday, isSameDay, differenceInDays } from 'date-fns';
+import { format, isToday, isYesterday, isSameDay, differenceInDays, differenceInMinutes } from 'date-fns';
 import { hu } from 'date-fns/locale';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -65,6 +62,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/components/ui/use-toast';
+import ConversationList from '@/components/ConversationList';
+
+// ...
 
 const Messages = () => {
   const navigate = useNavigate();
@@ -78,6 +78,7 @@ const Messages = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -130,10 +131,6 @@ const Messages = () => {
       setSendingMessage(true);
       await sendMessage(currentConversation, newMessage);
       setNewMessage('');
-      toast({
-        description: "Üzenet elküldve",
-        duration: 2000
-      });
     } catch (error) {
       console.error('Hiba az üzenet küldése közben:', error);
       toast({
@@ -154,11 +151,6 @@ const Messages = () => {
       await deleteMessage(messageToDelete.id);
       setMessageToDelete(null);
       setShowDeleteDialog(false);
-      
-      toast({
-        title: "Üzenet törölve",
-        description: "Az üzenetet sikeresen töröltük.",
-      });
     } catch (error: any) {
       console.error('Hiba az üzenet törlése közben:', error);
       toast({
@@ -200,6 +192,35 @@ const Messages = () => {
           console.log('Textarea manuális fókuszálása');
           textarea.focus();
         }
+      }
+    }, 100);
+  };
+
+  // Válasz üzenetre
+  const handleReplyToMessage = (message: Message) => {
+    console.log('handleReplyToMessage called with message:', message);
+    console.log('Előző replyingToMessage állapot:', replyingToMessage);
+    
+    // Beállítjuk a válaszolandó üzenetet
+    setReplyingToMessage(prevState => {
+      console.log('setReplyingToMessage callback, előző állapot:', prevState);
+      console.log('Új állapot beállítása:', message);
+      return message;
+    });
+    
+    // Görgetés a chat input mezőhöz
+    setTimeout(() => {
+      console.log('Görgetés a chat input mezőhöz');
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+      
+      // Fókuszáljuk a textarea-t
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        console.log('Textarea manuális fókuszálása');
+        textarea.focus();
       }
     }, 100);
   };
@@ -344,30 +365,40 @@ const Messages = () => {
     }
   };
 
-  // Reakciók lekérdezése az üzenetekhez
+  // Reakciók lekérdezése és feliratkozás a változásokra
   useEffect(() => {
     let isMounted = true;
+    const reactionChannels: any[] = [];
     const fetchReactionsQueue = [...messages];
     let isProcessing = false;
     
-    // Reakció csatornák tárolása
-    const reactionChannels: any[] = [];
-    
+    // Sorban dolgozzuk fel az üzeneteket, hogy ne terheljük túl a szervert
     const processQueue = async () => {
-      if (!isProcessing && fetchReactionsQueue.length > 0 && isMounted) {
-        isProcessing = true;
-        const message = fetchReactionsQueue.shift();
-        
-        if (message) {
-          try {
-            // Lekérjük a reakciókat
-            const reactions = await getMessageReactions(message.id);
-            if (isMounted) {
-              setMessageReactions(prev => ({
-                ...prev,
-                [message.id]: reactions
-              }));
-              
+      if (isProcessing || fetchReactionsQueue.length === 0 || !isMounted) return;
+      
+      isProcessing = true;
+      
+      // Kiveszünk egy üzenetet a sorból
+      const message = fetchReactionsQueue.shift();
+      
+      if (message) {
+        try {
+          console.log(`Reakciók lekérdezése a(z) ${message.id} üzenethez...`);
+          
+          // Lekérdezzük a reakciókat
+          const reactions = await getMessageReactions(message.id);
+          
+          if (isMounted) {
+            console.log(`Reakciók a(z) ${message.id} üzenethez:`, reactions);
+            
+            // Frissítjük az állapotot
+            setMessageReactions(prev => ({
+              ...prev,
+              [message.id]: reactions
+            }));
+            
+            // Korlátozzuk a csatornák számát, csak az utolsó 10 üzenethez iratkozunk fel
+            if (reactionChannels.length < 10) {
               // Feliratkozunk a reakciók változásaira
               const channel = subscribeToMessageReactions(message.id, (updatedReactions) => {
                 if (isMounted) {
@@ -383,21 +414,25 @@ const Messages = () => {
                 reactionChannels.push(channel);
               }
             }
-          } catch (error) {
-            console.error('Hiba a reakciók lekérdezésekor:', error);
           }
+        } catch (error) {
+          console.error('Hiba a reakciók lekérdezésekor:', error);
         }
-        
-        isProcessing = false;
-        
-        // Ha még van elem a sorban, folytatjuk a feldolgozást
-        if (fetchReactionsQueue.length > 0 && isMounted) {
-          setTimeout(processQueue, 100); // Kis késleltetés a kérések között
-        }
+      }
+      
+      isProcessing = false;
+      
+      // Ha még van elem a sorban, folytatjuk a feldolgozást
+      if (fetchReactionsQueue.length > 0 && isMounted) {
+        setTimeout(processQueue, 100); // Kis késleltetés a kérések között
       }
     };
     
     if (messages.length > 0) {
+      // Csak az utolsó 20 üzenetet dolgozzuk fel
+      const recentMessages = messages.slice(-20);
+      fetchReactionsQueue.length = 0;
+      fetchReactionsQueue.push(...recentMessages);
       processQueue();
     }
     
@@ -407,7 +442,11 @@ const Messages = () => {
       // Leiratkozunk a reakció csatornákról
       reactionChannels.forEach(channel => {
         if (channel) {
-          supabase.removeChannel(channel);
+          try {
+            supabase.removeChannel(channel);
+          } catch (error) {
+            console.error('Hiba a reakció csatorna eltávolításakor:', error);
+          }
         }
       });
     };
@@ -435,7 +474,6 @@ const Messages = () => {
   if (!user) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
-        <Navigation />
         <div className="flex-1 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
@@ -602,123 +640,22 @@ const Messages = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
-      <Navigation />
-      <div className="flex flex-1 pt-16 w-full overflow-hidden">
+      <div className="flex flex-1 w-full overflow-hidden">
         {/* Beszélgetések listája - élénk, játékos dizájn */}
         {(showConversationList || !isMobileView) && (
-          <div className="w-full md:w-1/3 border-r border-indigo-100 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl relative overflow-hidden flex flex-col">
-            {/* Decorative elements */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <div className="absolute top-10 right-10 w-[300px] h-[300px] bg-white/10 rounded-full mix-blend-overlay filter blur-3xl"></div>
-              <div className="absolute bottom-10 left-10 w-[250px] h-[250px] bg-pink-500/10 rounded-full mix-blend-overlay filter blur-3xl"></div>
-            </div>
-            
-            <div className="p-4 border-b border-indigo-400/30 bg-indigo-600/80 backdrop-blur-sm relative z-10 flex-shrink-0">
-              <h2 className="text-xl font-bold mb-4 text-white">Beszélgetések</h2>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-indigo-200" />
-                <Input
-                  placeholder="Keresés..."
-                  className="pl-8 bg-white/20 border-indigo-400/30 focus-visible:ring-white/50 text-white placeholder:text-indigo-200"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-            <ScrollArea className="flex-1 overflow-y-auto">
-              {conversationsLoading ? (
-                // Betöltés alatt megjelenő helyőrzők
-                <div className="p-4 space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <Skeleton className="h-12 w-12 rounded-full" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-[200px]" />
-                        <Skeleton className="h-4 w-[160px]" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : filteredConversations.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 border border-gray-600 shadow-lg relative z-10">
-                    <MessageCircle className="h-10 w-10 text-primary/70" />
-                  </div>
-                  <p className="font-medium text-lg mb-1">Nincs beszélgetésed még</p>
-                  <p className="text-sm mt-2 mb-6">
-                    Küldj egy üzenetet a beszélgetés megkezdéséhez!
-                  </p>
-                  <Button 
-                    className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 transition-all shadow-md"
-                    onClick={() => navigate('/coaches')}
-                  >
-                    Edzők böngészése
-                  </Button>
-                </div>
-              ) : (
-                <div>
-                  {filteredConversations.map((conversation) => {
-                    const otherParticipant = getOtherParticipant(conversation);
-                    if (!otherParticipant) return null;
-                    
-                    // Biztosítsuk, hogy a last_message létezik
-                    const lastMessageContent = conversation.last_message?.content ?? 'Nincs üzenet';
-                    
-                    // Biztosítsuk, hogy a last_message_time létezik
-                    const lastMessageTime = conversation.last_message?.created_at ?? '';
-                    
-                    return (
-                      <div
-                        key={conversation.id}
-                        className={`p-4 border-b border-indigo-400/30 cursor-pointer transition-all relative ${
-                          currentConversation === conversation.id 
-                            ? 'bg-white/20 shadow-md' 
-                            : conversation.unread_count 
-                              ? 'bg-indigo-700/40 hover:bg-white/10' 
-                              : 'hover:bg-white/10'
-                        }`}
-                        onClick={() => handleSelectConversation(conversation.id)}
-                      >
-                        {currentConversation === conversation.id && (
-                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-white"></div>
-                        )}
-                        <div className="flex items-center space-x-4">
-                          <Avatar className="h-10 w-10 border-2 border-white/30 mr-3">
-                            <AvatarImage src={getOtherParticipant(conversation)?.avatar_url ?? ''} />
-                            <AvatarFallback className="bg-indigo-300 text-indigo-800">
-                              {getOtherParticipant(conversation)?.first_name?.[0]}{getOtherParticipant(conversation)?.last_name?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-center">
-                              <h3 className={`text-sm font-medium truncate ${conversation.unread_count ? 'text-white font-semibold' : 'text-indigo-100'}`}>
-                                {`${getOtherParticipant(conversation)?.first_name || ''} ${getOtherParticipant(conversation)?.last_name || ''}`}
-                              </h3>
-                              <span className="text-xs text-indigo-200">
-                                {formatConversationTime(lastMessageTime)}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <p className={`text-xs truncate ${conversation.unread_count ? 'text-white font-medium' : 'text-indigo-200'}`}>
-                                {lastMessageContent}
-                              </p>
-                              {conversation.unread_count > 0 && (
-                                <Badge variant="default" className="ml-2 bg-white text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800">
-                                  {conversation.unread_count}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
+          <ConversationList 
+            currentConversation={currentConversation}
+            setCurrentConversation={(id) => {
+              setCurrentConversation(id);
+              if (isMobileView) {
+                setShowConversationList(false);
+              }
+            }}
+            isMobileView={isMobileView}
+            setShowConversationList={setShowConversationList}
+          />
         )}
-
+        
         {/* Beszélgetés tartalma - világos, modern dizájn */}
         <div className={`flex-1 flex flex-col ${(!showConversationList && isMobileView) ? 'block' : 'hidden md:flex'} relative bg-white overflow-hidden`}>
           {currentConversation ? (
@@ -767,13 +704,15 @@ const Messages = () => {
               </div>
 
               {/* Üzenetek listája - világos, tiszta háttér */}
-              <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 bg-gradient-to-br from-blue-50 to-white relative z-10 overflow-y-auto">
+              <ScrollArea ref={scrollAreaRef} className="flex-1 pt-16 px-4 pb-4 bg-gradient-to-br from-blue-50 to-white relative z-10 overflow-y-auto">
                 {loading ? (
                   <div className="flex justify-center items-center h-full">
                     <div className="flex flex-col items-center">
-                      <div className="relative">
-                        <div className="w-16 h-16 rounded-full bg-primary/10 animate-pulse"></div>
-                        <Loader2 className="h-8 w-8 animate-spin text-primary absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                      <div className="flex items-center justify-center">
+                        <div className="relative w-16 h-16 flex items-center justify-center">
+                          <div className="absolute inset-0 rounded-full border-4 border-primary/10"></div>
+                          <div className="absolute inset-0 rounded-full border-t-4 border-r-4 border-primary animate-spin"></div>
+                        </div>
                       </div>
                       <p className="mt-4 text-gray-400">Üzenetek betöltése...</p>
                     </div>
@@ -784,7 +723,7 @@ const Messages = () => {
                       <MessageSquare className="h-12 w-12 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <h3 className="text-lg font-medium mb-2 text-white">Nincs üzenet</h3>
-                    <p className="text-gray-300 max-w-md mb-6">
+                    <p className="text-gray-300 mb-6">
                       Küldj egy üzenetet a beszélgetés megkezdéséhez!
                     </p>
                     <div className="w-full max-w-md px-4 py-3 bg-muted/50 rounded-lg border border-border/50 shadow-sm">
@@ -794,34 +733,100 @@ const Messages = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {messages.map((message, index) => {
-                      const isOwnMessage = message.sender_id === user?.id;
-                      const sender = message.sender;
+                  <div className="space-y-2">
+                    {messages.length > 0 && (
+                      <div className="mb-8 text-center">
+                        <div className="inline-block bg-blue-100 rounded-lg px-4 py-2 text-sm text-blue-800 shadow-sm border border-blue-200">
+                          <span className="font-medium">Beszélgetés kezdete</span> • {format(new Date(messages[0]?.created_at || new Date()), 'yyyy. MMMM d.', { locale: hu })}
+                        </div>
+                      </div>
+                    )}
+                    {messages.reduce((result: JSX.Element[], message, index, array) => {
+                      const messageDate = new Date(message.created_at);
                       
-                      return (
+                      // Dátum elválasztó hozzáadása, ha ez az első üzenet vagy ha más napból származik, mint az előző
+                      if (index === 0 || !isSameDay(messageDate, new Date(array[index - 1].created_at))) {
+                        const today = new Date();
+                        const daysDifference = differenceInDays(today, messageDate);
+                        
+                        let dateDisplay = '';
+                        
+                        if (isToday(messageDate)) {
+                          dateDisplay = 'Ma';
+                        } else if (isYesterday(messageDate)) {
+                          dateDisplay = 'Tegnap';
+                        } else if (daysDifference < 7) {
+                          // Az elmúlt hét napban
+                          dateDisplay = format(messageDate, 'EEEE', { locale: hu });
+                          // Nagybetűs kezdés
+                          dateDisplay = dateDisplay.charAt(0).toUpperCase() + dateDisplay.slice(1);
+                        } else {
+                          // Régebbi dátum
+                          dateDisplay = format(messageDate, 'yyyy. MMMM d. (EEEE)', { locale: hu });
+                          // Nagybetűs kezdés
+                          dateDisplay = dateDisplay.charAt(0).toUpperCase() + dateDisplay.slice(1);
+                        }
+                        
+                        result.push(
+                          <div key={`date-${message.id}`} className="flex justify-center my-6">
+                            <div className="bg-gray-100 rounded-full px-4 py-1 text-xs text-gray-600 font-medium">
+                              {dateDisplay}
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Csoportosítjuk az üzeneteket küldő alapján
+                      // Egy üzenet a sorozat első eleme, ha:
+                      // 1. Ez az első üzenet a listában, vagy
+                      // 2. Az előző üzenet más felhasználótól származik
+                      const isFirstMessageInGroup = index === 0 || array[index - 1].sender_id !== message.sender_id;
+                      
+                      // Ellenőrizzük, hogy ez az üzenet az utolsó-e az azonos percben létrehozott üzenetek közül
+                      // Csak akkor jelenítjük meg az időpontot, ha:
+                      // 1. Ez az utolsó üzenet a listában, vagy
+                      // 2. A következő üzenet más percben jött létre, vagy
+                      // 3. A következő üzenet más felhasználótól származik
+                      const isLastMessageInMinute = index === array.length - 1 || 
+                        array[index + 1].sender_id !== message.sender_id ||
+                        format(new Date(message.created_at), 'HH:mm') !== format(new Date(array[index + 1].created_at), 'HH:mm');
+                      
+                      // Ellenőrizzük, hogy ez az üzenet időben jelentősen eltér-e az előzőtől
+                      // Nagyobb térközt adunk, ha:
+                      // 1. Ez az első üzenet a listában, vagy
+                      // 2. Az előző üzenet legalább 5 perccel korábban jött létre
+                      const isTimeGap = index === 0 || 
+                        differenceInMinutes(new Date(message.created_at), new Date(array[index - 1].created_at)) >= 5;
+                      
+                      result.push(
                         <MessageItem 
                           key={message.id}
                           message={message}
-                          isOwnMessage={isOwnMessage}
-                          sender={sender}
+                          isOwnMessage={message.sender_id === user?.id}
+                          sender={message.sender}
                           onReact={(messageId, reaction) => handleReactToMessage(messageId, reaction)}
                           onEdit={handleEditMessage}
                           onDelete={(message) => {
                             setMessageToDelete(message);
                             setShowDeleteDialog(true);
                           }}
+                          onReply={handleReplyToMessage}
                           reactions={messageReactions[message.id] || []}
                           currentUser={user}
-                          isLastMessage={index === messages.length - 1}
+                          isLastMessage={index === array.length - 1}
                           showEmojiKeyboard={showEmojiKeyboard}
                           setShowEmojiKeyboard={setShowEmojiKeyboard}
                           emojiSearch={emojiSearch}
                           setEmojiSearch={setEmojiSearch}
-                          commonEmojis={commonEmojis}
+                          index={index}
+                          isFirstMessageInGroup={isFirstMessageInGroup}
+                          isLastMessageInMinute={isLastMessageInMinute}
+                          isTimeGap={isTimeGap}
                         />
                       );
-                    })}
+                      
+                      return result;
+                    }, [])}
                     
                     {isTyping && (
                       <div className="flex items-center p-2 mb-2 ml-12">
@@ -902,7 +907,9 @@ const Messages = () => {
               <MessageInput 
                 conversationId={currentConversation} 
                 editingMessage={editingMessage} 
+                replyingToMessage={replyingToMessage}
                 onCancelEdit={() => setEditingMessage(null)} 
+                onCancelReply={() => setReplyingToMessage(null)}
               />
             </>
           ) : (
@@ -912,7 +919,7 @@ const Messages = () => {
                 <div className="absolute -top-20 -left-20 w-40 h-40 bg-blue-500/5 rounded-full mix-blend-overlay filter blur-3xl"></div>
                 <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-indigo-500/5 rounded-full mix-blend-overlay filter blur-3xl"></div>
                 
-                <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6 border border-blue-200 shadow-lg relative z-10">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6 border border-blue-200 shadow-lg relative z-10">
                   <MessageCircle className="h-12 w-12 text-blue-500" />
                 </div>
                 <h3 className="text-xl font-medium mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600">Válassz egy beszélgetést</h3>
@@ -958,11 +965,15 @@ const Messages = () => {
 const MessageInput = ({ 
   conversationId, 
   editingMessage, 
-  onCancelEdit 
+  replyingToMessage,
+  onCancelEdit,
+  onCancelReply
 }: { 
   conversationId: string; 
   editingMessage: Message | null; 
+  replyingToMessage: Message | null;
   onCancelEdit: () => void;
+  onCancelReply: () => void;
 }) => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -974,6 +985,7 @@ const MessageInput = ({
   const { toast } = useToast();
 
   console.log('MessageInput komponens renderelése, editingMessage:', editingMessage);
+  console.log('MessageInput komponens renderelése, replyingToMessage:', replyingToMessage);
   
   // Szerkesztés mód kezelése
   useEffect(() => {
@@ -999,6 +1011,20 @@ const MessageInput = ({
     }
   }, [editingMessage]);
   
+  // Válasz mód kezelése
+  useEffect(() => {
+    console.log('MessageInput useEffect futás: replyingToMessage változott', replyingToMessage);
+    if (replyingToMessage) {
+      // Fókuszáljuk a textarea-t egy kis késleltetéssel, hogy biztosan betöltődjön
+      setTimeout(() => {
+        if (textareaRef.current) {
+          console.log('Textarea fókuszálása válasz módban');
+          textareaRef.current.focus();
+        }
+      }, 100);
+    }
+  }, [replyingToMessage]);
+
   const handleSendMessage = async () => {
     if (message.trim()) {
       if (editingMessage) {
@@ -1008,10 +1034,6 @@ const MessageInput = ({
           await updateMessage(editingMessage.id, message);
           setMessage('');
           onCancelEdit();
-          toast({
-            title: "Üzenet szerkesztve",
-            description: "Az üzenetet sikeresen szerkesztetted.",
-          });
         } catch (error: any) {
           console.error('Hiba az üzenet szerkesztése közben:', error);
           toast({
@@ -1021,9 +1043,29 @@ const MessageInput = ({
           });
         }
       } else {
-        // Ha új üzenetet küldünk
-        await sendMessage(conversationId, message, 'text');
-        setMessage('');
+        try {
+          // Ha új üzenetet küldünk
+          const replyData = replyingToMessage ? {
+            reply_to_id: replyingToMessage.id,
+            reply_to_content: replyingToMessage.content
+          } : undefined;
+          
+          await sendMessage(conversationId, message, 'text', undefined, replyData);
+          
+          setMessage('');
+          
+          // Ha válaszoltunk, akkor töröljük a válaszolandó üzenetet
+          if (replyingToMessage) {
+            onCancelReply();
+          }
+        } catch (error: any) {
+          console.error('Hiba az üzenet küldése közben:', error);
+          toast({
+            title: "Hiba történt",
+            description: error?.message || 'Ismeretlen hiba történt az üzenet küldése közben.',
+            variant: "destructive",
+          });
+        }
       }
       
       if (textareaRef.current) {
@@ -1116,6 +1158,24 @@ const MessageInput = ({
         </div>
       )}
       
+      {replyingToMessage && (
+        <div className="bg-blue-50 p-2 border-b border-blue-200 flex justify-between items-center">
+          <div className="flex items-center text-sm text-blue-700">
+            <Reply className="h-4 w-4 mr-2" />
+            Válasz
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onCancelReply}
+            className="h-8 text-gray-600 hover:text-gray-800 hover:bg-blue-100"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Mégsem
+          </Button>
+        </div>
+      )}
+      
       {showEmojiPicker && (
         <div className="absolute bottom-full left-0 right-0 mb-3 z-50">
           <EmojiPicker 
@@ -1141,7 +1201,7 @@ const MessageInput = ({
             value={message}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder={editingMessage ? "Módosítsd az üzenetet..." : "Írj egy üzenetet..."}
+            placeholder={editingMessage ? "Módosítsd az üzenetet..." : replyingToMessage ? "Írj egy választ..." : "Írj egy üzenetet..."}
             className="w-full border rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32"
             rows={1}
           />
@@ -1178,40 +1238,105 @@ const MessageInput = ({
 const MessageItem = ({ 
   message, 
   isOwnMessage, 
-  sender,
-  onReact,
-  onEdit,
-  onDelete,
-  reactions,
-  currentUser,
+  sender, 
+  onReact, 
+  onEdit, 
+  onDelete, 
+  onReply, 
+  reactions, 
+  currentUser, 
   isLastMessage,
   showEmojiKeyboard,
   setShowEmojiKeyboard,
   emojiSearch,
   setEmojiSearch,
-  commonEmojis
+  index,
+  isFirstMessageInGroup,
+  isLastMessageInMinute,
+  isTimeGap
 }: { 
   message: Message; 
-  isOwnMessage: boolean;
-  sender: { id: string; first_name: string; last_name: string; avatar_url: string | null } | null;
-  onReact: (messageId: string, reaction: string) => void;
-  onEdit: (message: Message) => void;
-  onDelete: (message: Message) => void;
+  isOwnMessage: boolean; 
+  sender: any; 
+  onReact: (messageId: string, reaction: string) => void; 
+  onEdit: (message: Message) => void; 
+  onDelete: (message: Message) => void; 
+  onReply: (message: Message) => void; 
   reactions: any[];
   currentUser: any;
   isLastMessage: boolean;
   showEmojiKeyboard: string | null;
-  setShowEmojiKeyboard: (messageId: string | null) => void;
+  setShowEmojiKeyboard: (id: string | null) => void;
   emojiSearch: string;
   setEmojiSearch: (search: string) => void;
-  commonEmojis: string[];
+  index: number;
+  isFirstMessageInGroup: boolean;
+  isLastMessageInMinute: boolean;
+  isTimeGap: boolean;
 }) => {
   const messageTime = new Date(message.created_at);
   const formattedTime = format(messageTime, 'HH:mm');
   const [showReactionMenu, setShowReactionMenu] = useState(false);
   const [menuLocked, setMenuLocked] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
+  // Relatív időpont meghatározása
+  const getRelativeTimeString = (date: Date) => {
+    if (isToday(date)) {
+      return '';
+    } else if (isYesterday(date)) {
+      return 'tegnap, ';
+    } else {
+      const daysDifference = differenceInDays(new Date(), date);
+      
+      if (daysDifference === 2) {
+        return 'tegnapelőtt, ';
+      } else if (daysDifference > 2 && daysDifference <= 7) {
+        // A hét napja
+        return format(date, 'EEEE', { locale: hu }) + ', ';
+      } else {
+        // Dátum
+        return format(date, 'yyyy.MM.dd., ', { locale: hu });
+      }
+    }
+  };
+
+  const relativeTimeString = getRelativeTimeString(messageTime);
+
+  const renderMessageContent = () => {
+    if (message.message_type === 'image') {
+      return (
+        <div className="mt-1 max-w-xs">
+          <img 
+            src={message.file_url || ''} 
+            alt="Kép" 
+            className="rounded-lg max-h-60 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => {
+              // Kép nagyítása
+            }}
+          />
+        </div>
+      );
+    } else if (message.message_type === 'emoji') {
+      return (
+        <div className="text-4xl my-1">{message.content}</div>
+      );
+    } else {
+      // Szöveges üzenet
+      return (
+        <div className="break-words whitespace-pre-wrap">
+          {message.reply_to_id && (
+            <div className="mb-1 px-2 py-1.5 bg-gray-100 border-l-2 border-blue-400 rounded text-xs text-gray-600 flex items-center">
+              <Reply className="h-3 w-3 mr-1 text-blue-500" />
+              <span className="truncate max-w-[200px]">{message.reply_to_content}</span>
+            </div>
+          )}
+          {message.content}
+        </div>
+      );
+    }
+  };
+
   // Felhasználó reakciójának lekérdezése
   const getUserReactionForMessage = () => {
     if (!reactions || !currentUser) return null;
@@ -1226,13 +1351,14 @@ const MessageItem = ({
   // Emoji picker bezárása kattintásra
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showEmojiPicker) {
+      if (showEmojiKeyboard === message.id) {
         const target = event.target as HTMLElement;
         
         // Ellenőrizzük, hogy a kattintás a reakció menün kívül történt-e
         if (!target.closest('.message-item-' + message.id) && !target.closest('.emoji-picker-menu') && !target.closest('.emoji-keyboard')) {
           setShowReactionMenu(false);
           setMenuLocked(false);
+          setShowEmojiKeyboard(null);
         }
       }
     };
@@ -1241,7 +1367,7 @@ const MessageItem = ({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showReactionMenu, menuLocked, message.id]);
+  }, [showReactionMenu, menuLocked, message.id, showEmojiKeyboard]);
   
   // Egér elhagyja a reakciómenüt
   const handleMouseLeave = () => {
@@ -1251,9 +1377,15 @@ const MessageItem = ({
     }
   };
   
+  // Ellenőrizzük, hogy az emoji picker a menü alatt jelenjen-e meg
+  const shouldShowEmojiPickerBelow = index < 3; // Az első 3 üzenetnél alul jelenjen meg
+  
   return (
-    <div className={`flex mb-4 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-      {!isOwnMessage && (
+    <div 
+      className={`flex w-full mb-2 ${isTimeGap ? 'mt-6' : ''}`}
+      style={{ justifyContent: isOwnMessage ? 'flex-end' : 'flex-start' }}
+    >
+      {!isOwnMessage && isFirstMessageInGroup ? (
         <div className="mr-2 flex-shrink-0">
           {sender?.avatar_url ? (
             <img 
@@ -1267,9 +1399,11 @@ const MessageItem = ({
             </div>
           )}
         </div>
-      )}
+      ) : !isOwnMessage ? (
+        <div className="w-8 mr-2 flex-shrink-0"></div>
+      ) : null}
       <div className={`max-w-[70%] ${isOwnMessage ? 'order-1' : 'order-2'}`}>
-        {!isOwnMessage && (
+        {!isOwnMessage && isFirstMessageInGroup && (
           <div className="text-xs text-gray-500 mb-1 ml-1">
             {sender?.first_name || ''} {sender?.last_name || ''}
           </div>
@@ -1284,48 +1418,7 @@ const MessageItem = ({
             position: 'relative'
           }}
         >
-          {message.message_type === 'image' ? (
-            <div className="rounded-lg overflow-hidden max-w-xs">
-              <a href={message.file_url || '#'} target="_blank" rel="noopener noreferrer">
-                <img 
-                  src={message.file_url || ''} 
-                  alt={message.content} 
-                  className="max-w-full h-auto"
-                  loading="lazy"
-                />
-              </a>
-              <div className="text-xs text-gray-500 mt-1">{message.content}</div>
-            </div>
-          ) : message.message_type === 'video' ? (
-            <div className="rounded-lg overflow-hidden max-w-xs">
-              <video 
-                src={message.file_url || ''} 
-                controls 
-                className="max-w-full h-auto"
-                poster={message.thumbnail_url || ''}
-              />
-              <div className="text-xs text-gray-500 mt-1">{message.content}</div>
-            </div>
-          ) : message.message_type === 'file' ? (
-            <a 
-              href={message.file_url || '#'} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <FileText className="h-8 w-8 text-blue-500 mr-3" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{message.content}</p>
-                <p className="text-xs text-gray-500">
-                  {message.file_size ? `${(message.file_size / 1024).toFixed(1)} KB` : 'Fájl'}
-                </p>
-              </div>
-            </a>
-          ) : message.message_type === 'emoji' ? (
-            <span className="text-4xl">{message.content}</span>
-          ) : (
-            <div className="whitespace-pre-wrap break-words">{message.content}</div>
-          )}
+          {renderMessageContent()}
           
           {/* Reakciók megjelenítése */}
           <div className="relative">
@@ -1396,7 +1489,10 @@ const MessageItem = ({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent 
                     align={isOwnMessage ? "end" : "start"}
-                    onInteractOutside={() => setMenuLocked(false)}
+                    onInteractOutside={() => {
+                      setMenuLocked(false);
+                      setShowReactionMenu(false);
+                    }}
                     className="bg-white border border-gray-200 shadow-md rounded-md z-50"
                   >
                     {isOwnMessage && (
@@ -1406,11 +1502,7 @@ const MessageItem = ({
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            console.log('Szerkesztés gombra kattintás a MessageItem komponensben');
-                            console.log('Message:', message);
-                            console.log('onEdit függvény típusa:', typeof onEdit);
                             onEdit(message);
-                            console.log('onEdit függvény meghívva');
                             setMenuLocked(false);
                             setShowReactionMenu(false);
                           }}
@@ -1438,7 +1530,7 @@ const MessageItem = ({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        // Itt implementálnánk a válasz funkciót
+                        onReply(message);
                         setMenuLocked(false);
                         setShowReactionMenu(false);
                       }}
@@ -1467,7 +1559,36 @@ const MessageItem = ({
             )}
             
             {/* Emoji keyboard a plusz gombra kattintva */}
-            {showEmojiKeyboard === message.id && (
+            {showEmojiKeyboard === message.id && shouldShowEmojiPickerBelow && (
+              <div 
+                className="absolute z-50 emoji-keyboard"
+                style={{ 
+                  top: '100%',
+                  left: isOwnMessage ? 'auto' : '0',
+                  right: isOwnMessage ? '0' : 'auto',
+                  marginTop: '8px',
+                  width: '300px'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker 
+                  onEmojiSelect={(emoji) => {
+                    onReact(message.id, emoji);
+                    setShowEmojiKeyboard(null);
+                    setShowReactionMenu(false);
+                    setMenuLocked(false);
+                  }}
+                  onClose={() => {
+                    setShowEmojiKeyboard(null);
+                    setShowReactionMenu(false);
+                    setMenuLocked(false);
+                  }}
+                />
+              </div>
+            )}
+            
+            {/* Emoji keyboard a plusz gombra kattintva - normál pozíció */}
+            {showEmojiKeyboard === message.id && !shouldShowEmojiPickerBelow && (
               <div 
                 className="absolute z-50 emoji-keyboard"
                 style={{ 
@@ -1486,7 +1607,11 @@ const MessageItem = ({
                     setShowReactionMenu(false);
                     setMenuLocked(false);
                   }}
-                  onClose={() => setShowEmojiKeyboard(null)}
+                  onClose={() => {
+                    setShowEmojiKeyboard(null);
+                    setShowReactionMenu(false);
+                    setMenuLocked(false);
+                  }}
                 />
               </div>
             )}
@@ -1505,7 +1630,7 @@ const MessageItem = ({
                   <div 
                     key={emoji} 
                     className={`flex items-center bg-gray-100 rounded-full px-2 py-0.5 text-xs cursor-pointer hover:bg-gray-200 ${
-                      users.some((r: any) => r.user_id === currentUser?.id) ? 'bg-blue-100 hover:bg-blue-200' : ''
+                      users.some((r: any) => r.user_id === currentUser?.id) ? 'bg-blue-100' : ''
                     }`}
                     onClick={() => onReact(message.id, emoji)}
                   >
@@ -1518,7 +1643,7 @@ const MessageItem = ({
           </div>
         </div>
         <div className="text-xs text-gray-500 mt-1 flex items-center">
-          <span>{formattedTime}</span>
+          {isLastMessageInMinute && <span>{relativeTimeString}{formattedTime}</span>}
           {isOwnMessage && isLastMessage && (
             <span className="ml-1">
               {message.is_read ? (
