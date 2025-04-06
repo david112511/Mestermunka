@@ -18,7 +18,7 @@ import {
   MessageCircle,
   Check,
   CheckCheck,
-  Trash2,
+  Trash,
   MoreVertical,
   Calendar,
   Image,
@@ -33,7 +33,10 @@ import {
   Paperclip,
   File,
   FileText,
-  Film
+  Film,
+  Reply,
+  Copy,
+  MoreHorizontal
 } from 'lucide-react';
 import { format, isToday, isYesterday, isSameDay, differenceInDays } from 'date-fns';
 import { hu } from 'date-fns/locale';
@@ -75,7 +78,6 @@ const Messages = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-  const [editedContent, setEditedContent] = useState("");
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -168,27 +170,38 @@ const Messages = () => {
   };
 
   // Üzenet szerkesztése
-  const handleUpdateMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMessage || !editedContent.trim()) return;
+  const handleEditMessage = (message: Message) => {
+    console.log('handleEditMessage called with message:', message);
+    console.log('Előző editingMessage állapot:', editingMessage);
     
-    try {
-      await updateMessage(editingMessage.id, editedContent);
-      setEditingMessage(null);
-      setEditedContent("");
+    // Explicit módon állítjuk be az editingMessage állapotot
+    setEditingMessage(prevState => {
+      console.log('setEditingMessage callback, előző állapot:', prevState);
+      console.log('Új állapot beállítása:', message);
+      return message;
+    });
+    
+    // Görgetés a chat input mezőhöz
+    setTimeout(() => {
+      console.log('Görgetés a chat input mezőhöz');
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
       
-      toast({
-        title: "Üzenet szerkesztve",
-        description: "Az üzenetet sikeresen szerkesztetted.",
-      });
-    } catch (error: any) {
-      console.error('Hiba az üzenet szerkesztése közben:', error);
-      toast({
-        title: "Hiba történt",
-        description: error?.message || 'Ismeretlen hiba történt az üzenet szerkesztése közben.',
-        variant: "destructive",
-      });
-    }
+      // Ellenőrizzük, hogy a textarea fókuszálva van-e
+      if (document.activeElement instanceof HTMLTextAreaElement) {
+        console.log('Textarea már fókuszálva van');
+      } else {
+        console.log('Textarea nincs fókuszálva');
+        // Próbáljuk meg manuálisan fókuszálni a textarea-t
+        const textarea = document.querySelector('textarea');
+        if (textarea) {
+          console.log('Textarea manuális fókuszálása');
+          textarea.focus();
+        }
+      }
+    }, 100);
   };
 
   // Gépelés jelzés kezelése
@@ -517,10 +530,6 @@ const Messages = () => {
       // Ha ugyanazzal a reakcióval reagált, akkor töröljük a reakciót
       if (currentUserReaction === reaction) {
         await removeReaction(messageId);
-        toast({
-          title: "Reakció eltávolítva",
-          description: `Sikeresen eltávolítottad a reakciót.`,
-        });
       } else {
         // Ha már van reakciója, először töröljük azt
         if (currentUserReaction) {
@@ -529,10 +538,6 @@ const Messages = () => {
         
         // Aztán hozzáadjuk az új reakciót
         await addReaction(messageId, reaction);
-        toast({
-          title: "Reakció hozzáadva",
-          description: `Sikeresen hozzáadtad a(z) ${reaction} reakciót.`,
-        });
       }
       
       // Frissítjük a reakciókat
@@ -554,11 +559,6 @@ const Messages = () => {
       setShowEmojiPicker(null);
     } catch (error: any) {
       console.error('Hiba a reakció kezelése közben:', error.message || error);
-      toast({
-        title: "Hiba történt",
-        description: error?.message || 'Ismeretlen hiba történt a reakció kezelése közben.',
-        variant: "destructive",
-      });
     }
   };
 
@@ -601,19 +601,19 @@ const Messages = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 overflow-hidden">
       <Navigation />
-      <div className="flex-1 flex flex-col md:flex-row pt-16 w-full">
+      <div className="flex flex-1 pt-16 w-full overflow-hidden">
         {/* Beszélgetések listája - élénk, játékos dizájn */}
         {(showConversationList || !isMobileView) && (
-          <div className="w-full md:w-1/3 border-r border-indigo-100 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl relative overflow-hidden">
+          <div className="w-full md:w-1/3 border-r border-indigo-100 bg-gradient-to-br from-indigo-500 to-purple-600 shadow-xl relative overflow-hidden flex flex-col">
             {/* Decorative elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <div className="absolute top-10 right-10 w-[300px] h-[300px] bg-white/10 rounded-full mix-blend-overlay filter blur-3xl"></div>
               <div className="absolute bottom-10 left-10 w-[250px] h-[250px] bg-pink-500/10 rounded-full mix-blend-overlay filter blur-3xl"></div>
             </div>
             
-            <div className="p-4 border-b border-indigo-400/30 bg-indigo-600/80 backdrop-blur-sm relative z-10">
+            <div className="p-4 border-b border-indigo-400/30 bg-indigo-600/80 backdrop-blur-sm relative z-10 flex-shrink-0">
               <h2 className="text-xl font-bold mb-4 text-white">Beszélgetések</h2>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-indigo-200" />
@@ -625,7 +625,7 @@ const Messages = () => {
                 />
               </div>
             </div>
-            <ScrollArea className="h-[calc(100vh-16rem)]">
+            <ScrollArea className="flex-1 overflow-y-auto">
               {conversationsLoading ? (
                 // Betöltés alatt megjelenő helyőrzők
                 <div className="p-4 space-y-4">
@@ -720,11 +720,11 @@ const Messages = () => {
         )}
 
         {/* Beszélgetés tartalma - világos, modern dizájn */}
-        <div className={`flex-1 flex flex-col ${(!showConversationList && isMobileView) ? 'block' : 'hidden md:flex'} relative bg-white`}>
+        <div className={`flex-1 flex flex-col ${(!showConversationList && isMobileView) ? 'block' : 'hidden md:flex'} relative bg-white overflow-hidden`}>
           {currentConversation ? (
             <>
               {/* Beszélgetés fejléc - élénk, vidám */}
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-500 to-indigo-500 text-white relative z-10 shadow-md">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-500 to-indigo-500 text-white relative z-10 shadow-md flex-shrink-0">
                 {isMobileView && (
                   <Button 
                     variant="ghost" 
@@ -767,7 +767,7 @@ const Messages = () => {
               </div>
 
               {/* Üzenetek listája - világos, tiszta háttér */}
-              <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 bg-gradient-to-br from-blue-50 to-white relative z-10">
+              <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 bg-gradient-to-br from-blue-50 to-white relative z-10 overflow-y-auto">
                 {loading ? (
                   <div className="flex justify-center items-center h-full">
                     <div className="flex flex-col items-center">
@@ -806,10 +806,7 @@ const Messages = () => {
                           isOwnMessage={isOwnMessage}
                           sender={sender}
                           onReact={(messageId, reaction) => handleReactToMessage(messageId, reaction)}
-                          onEdit={(message, content) => {
-                            setEditingMessage(message);
-                            setEditedContent(content);
-                          }}
+                          onEdit={handleEditMessage}
                           onDelete={(message) => {
                             setMessageToDelete(message);
                             setShowDeleteDialog(true);
@@ -817,6 +814,11 @@ const Messages = () => {
                           reactions={messageReactions[message.id] || []}
                           currentUser={user}
                           isLastMessage={index === messages.length - 1}
+                          showEmojiKeyboard={showEmojiKeyboard}
+                          setShowEmojiKeyboard={setShowEmojiKeyboard}
+                          emojiSearch={emojiSearch}
+                          setEmojiSearch={setEmojiSearch}
+                          commonEmojis={commonEmojis}
                         />
                       );
                     })}
@@ -837,49 +839,58 @@ const Messages = () => {
                     <div ref={messagesEndRef} />
                     
                     {showEmojiKeyboard && (
-                      <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowEmojiKeyboard(null)}>
-                        <div className="bg-white rounded-xl shadow-lg p-4 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-between items-center mb-3">
-                            <h3 className="text-lg font-medium">Emoji kiválasztása</h3>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
-                              onClick={() => setShowEmojiKeyboard(null)}
-                            >
-                              <X className="h-5 w-5 text-gray-500" />
-                            </Button>
-                          </div>
-                          
-                          <div className="mb-3">
-                            <Input
-                              type="text"
-                              placeholder="Keresés..."
-                              value={emojiSearch}
-                              onChange={(e) => setEmojiSearch(e.target.value)}
-                              className="w-full"
-                            />
-                          </div>
-                          
-                          <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto">
-                            {commonEmojis
-                              .filter(emoji => emojiSearch === '' || emoji.includes(emojiSearch))
-                              .map((emoji) => (
-                                <Button
-                                  key={emoji}
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100"
-                                  onClick={() => {
-                                    handleReactToMessage(showEmojiKeyboard, emoji);
-                                    setShowEmojiKeyboard(null);
-                                    setEmojiSearch('');
-                                  }}
-                                >
-                                  <span className="text-2xl">{emoji}</span>
-                                </Button>
-                              ))}
-                          </div>
+                      <div 
+                        className="absolute bg-white rounded-xl shadow-lg p-4 z-50 emoji-keyboard"
+                        style={{ 
+                          bottom: '100%',
+                          left: '0',
+                          marginBottom: '8px',
+                          width: '300px',
+                          maxHeight: '300px',
+                          overflow: 'auto'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="text-lg font-medium">Emoji kiválasztása</h3>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
+                            onClick={() => setShowEmojiKeyboard(null)}
+                          >
+                            <X className="h-5 w-5" />
+                          </Button>
+                        </div>
+                        
+                        <div className="mb-3">
+                          <Input
+                            type="text"
+                            placeholder="Keresés..."
+                            value={emojiSearch}
+                            onChange={(e) => setEmojiSearch(e.target.value)}
+                            className="w-full"
+                          />
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                          {commonEmojis
+                            .filter(emoji => emojiSearch === '' || emoji.includes(emojiSearch))
+                            .map((emoji) => (
+                              <Button
+                                key={emoji}
+                                variant="ghost"
+                                size="sm"
+                                className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100"
+                                onClick={() => {
+                                  handleReactToMessage(showEmojiKeyboard, emoji);
+                                  setShowEmojiKeyboard(null);
+                                  setEmojiSearch('');
+                                }}
+                              >
+                                <span className="text-2xl">{emoji}</span>
+                              </Button>
+                            ))}
                         </div>
                       </div>
                     )}
@@ -888,9 +899,11 @@ const Messages = () => {
                 )}
               </ScrollArea>
 
-              <div className="p-4 border-t border-gray-200 bg-white relative z-10">
-                <MessageInput conversationId={currentConversation} />
-              </div>
+              <MessageInput 
+                conversationId={currentConversation} 
+                editingMessage={editingMessage} 
+                onCancelEdit={() => setEditingMessage(null)} 
+              />
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center p-8 bg-gradient-to-br from-blue-50 to-white relative z-10">
@@ -918,50 +931,6 @@ const Messages = () => {
         </div>
       </div>
       
-      {/* Üzenet szerkesztés dialógus */}
-      {editingMessage && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setEditingMessage(null)}>
-          <div className="bg-white rounded-xl shadow-lg p-4 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-lg font-medium">Üzenet szerkesztése</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
-                onClick={() => setEditingMessage(null)}
-              >
-                <X className="h-5 w-5 text-gray-500" />
-              </Button>
-            </div>
-            
-            <form onSubmit={handleUpdateMessage} className="flex flex-col gap-3">
-              <textarea
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                className="w-full p-3 rounded bg-gray-50 text-gray-800 text-sm border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 min-h-[100px]"
-                rows={4}
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setEditingMessage(null)}
-                >
-                  Mégsem
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-blue-500 hover:bg-blue-600 text-white"
-                >
-                  Mentés
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      
       {/* Üzenet törlés megerősítő dialógus */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="bg-white border-gray-200">
@@ -986,19 +955,77 @@ const Messages = () => {
   );
 };
 
-const MessageInput = ({ conversationId }: { conversationId: string }) => {
+const MessageInput = ({ 
+  conversationId, 
+  editingMessage, 
+  onCancelEdit 
+}: { 
+  conversationId: string; 
+  editingMessage: Message | null; 
+  onCancelEdit: () => void;
+}) => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showFileUploader, setShowFileUploader] = useState(false);
-  const { sendMessage } = useMessages();
+  const { sendMessage, updateMessage } = useMessages();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
 
+  console.log('MessageInput komponens renderelése, editingMessage:', editingMessage);
+  
+  // Szerkesztés mód kezelése
+  useEffect(() => {
+    console.log('MessageInput useEffect futás: editingMessage változott', editingMessage);
+    if (editingMessage) {
+      console.log('Üzenet tartalom beállítása szerkesztéshez:', editingMessage.content);
+      setMessage(editingMessage.content);
+      
+      // Fókuszáljuk a textarea-t egy kis késleltetéssel, hogy biztosan betöltődjön
+      setTimeout(() => {
+        if (textareaRef.current) {
+          console.log('Textarea fókuszálása késleltetéssel');
+          textareaRef.current.focus();
+          // Automatikus magasság beállítás
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        } else {
+          console.log('textareaRef.current nem létezik a késleltetés után sem');
+        }
+      }, 100);
+    } else {
+      console.log('Nincs szerkesztendő üzenet');
+    }
+  }, [editingMessage]);
+  
   const handleSendMessage = async () => {
     if (message.trim()) {
-      await sendMessage(conversationId, message, 'text');
-      setMessage('');
+      if (editingMessage) {
+        // Ha szerkesztünk, akkor frissítjük az üzenetet
+        try {
+          console.log('Üzenet szerkesztése küldés:', editingMessage.id, message);
+          await updateMessage(editingMessage.id, message);
+          setMessage('');
+          onCancelEdit();
+          toast({
+            title: "Üzenet szerkesztve",
+            description: "Az üzenetet sikeresen szerkesztetted.",
+          });
+        } catch (error: any) {
+          console.error('Hiba az üzenet szerkesztése közben:', error);
+          toast({
+            title: "Hiba történt",
+            description: error?.message || 'Ismeretlen hiba történt az üzenet szerkesztése közben.',
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Ha új üzenetet küldünk
+        await sendMessage(conversationId, message, 'text');
+        setMessage('');
+      }
+      
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -1052,12 +1079,43 @@ const MessageInput = ({ conversationId }: { conversationId: string }) => {
     // Fájlok esetén pedig a fájl neve és mérete
     const content = fileData.name;
     
-    sendMessage(conversationId, content, messageType, fileData);
+    if (editingMessage) {
+      // Ha szerkesztünk, akkor frissítjük az üzenetet
+      // Egyelőre csak szöveges módosítást támogatunk
+      toast({
+        title: "Figyelmeztetés",
+        description: "Szerkesztés közben nem lehet fájlt feltölteni.",
+        variant: "destructive",
+      });
+    } else {
+      // Ha új üzenetet küldünk
+      sendMessage(conversationId, content, messageType, fileData);
+    }
+    
     setShowFileUploader(false);
   };
 
   return (
-    <div className="border-t p-3 bg-white relative">
+    <div className="border-t bg-white relative">
+      {/* Szerkesztési sáv */}
+      {editingMessage && (
+        <div className="bg-blue-50 p-2 border-b border-blue-200 flex justify-between items-center">
+          <div className="flex items-center text-sm text-blue-700">
+            <Edit className="h-4 w-4 mr-2" />
+            Üzenet módosítása
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onCancelEdit}
+            className="h-8 text-gray-600 hover:text-gray-800 hover:bg-blue-100"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Mégsem
+          </Button>
+        </div>
+      )}
+      
       {showEmojiPicker && (
         <div className="absolute bottom-full left-0 right-0 mb-3 z-50">
           <EmojiPicker 
@@ -1076,14 +1134,14 @@ const MessageInput = ({ conversationId }: { conversationId: string }) => {
         </div>
       )}
       
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 p-3">
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
             value={message}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="Írj egy üzenetet..."
+            placeholder={editingMessage ? "Módosítsd az üzenetet..." : "Írj egy üzenetet..."}
             className="w-full border rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-32"
             rows={1}
           />
@@ -1096,7 +1154,8 @@ const MessageInput = ({ conversationId }: { conversationId: string }) => {
             </button>
             <button 
               onClick={() => setShowFileUploader(!showFileUploader)}
-              className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+              className={`text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 ${editingMessage ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!!editingMessage}
             >
               <Paperclip className="h-5 w-5" />
             </button>
@@ -1125,96 +1184,34 @@ const MessageItem = ({
   onDelete,
   reactions,
   currentUser,
-  isLastMessage
+  isLastMessage,
+  showEmojiKeyboard,
+  setShowEmojiKeyboard,
+  emojiSearch,
+  setEmojiSearch,
+  commonEmojis
 }: { 
   message: Message; 
   isOwnMessage: boolean;
   sender: { id: string; first_name: string; last_name: string; avatar_url: string | null } | null;
   onReact: (messageId: string, reaction: string) => void;
-  onEdit: (message: Message, content: string) => void;
+  onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
   reactions: any[];
   currentUser: any;
-  isLastMessage: boolean
+  isLastMessage: boolean;
+  showEmojiKeyboard: string | null;
+  setShowEmojiKeyboard: (messageId: string | null) => void;
+  emojiSearch: string;
+  setEmojiSearch: (search: string) => void;
+  commonEmojis: string[];
 }) => {
   const messageTime = new Date(message.created_at);
   const formattedTime = format(messageTime, 'HH:mm');
-  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [showReactionMenu, setShowReactionMenu] = useState(false);
+  const [menuLocked, setMenuLocked] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   
-  // Emoji picker bezárása kattintásra
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showEmojiPicker) {
-        const target = event.target as HTMLElement;
-        if (!target.closest('.emoji-picker-menu') && !target.closest('.emoji-picker-trigger')) {
-          setShowEmojiPicker(null);
-        }
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showEmojiPicker]);
-  
-  // Üzenet típus alapján különböző megjelenítés
-  const renderMessageContent = () => {
-    switch (message.message_type) {
-      case 'image':
-        return (
-          <div className="rounded-lg overflow-hidden max-w-xs">
-            <a href={message.file_url || '#'} target="_blank" rel="noopener noreferrer">
-              <img 
-                src={message.file_url || ''} 
-                alt={message.content} 
-                className="max-w-full h-auto"
-                loading="lazy"
-              />
-            </a>
-            <div className="text-xs text-gray-500 mt-1">{message.content}</div>
-          </div>
-        );
-      case 'video':
-        return (
-          <div className="rounded-lg overflow-hidden max-w-xs">
-            <video 
-              src={message.file_url || ''} 
-              controls 
-              className="max-w-full h-auto"
-              poster={message.thumbnail_url || ''}
-            />
-            <div className="text-xs text-gray-500 mt-1">{message.content}</div>
-          </div>
-        );
-      case 'file':
-        return (
-          <a 
-            href={message.file_url || '#'} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <FileText className="h-8 w-8 text-blue-500 mr-3" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{message.content}</p>
-              <p className="text-xs text-gray-500">
-                {message.file_size ? `${(message.file_size / 1024).toFixed(1)} KB` : 'Fájl'}
-              </p>
-            </div>
-          </a>
-        );
-      case 'emoji':
-        return (
-          <span className="text-4xl">{message.content}</span>
-        );
-      default:
-        return (
-          <div className="whitespace-pre-wrap break-words">{message.content}</div>
-        );
-    }
-  };
-
   // Felhasználó reakciójának lekérdezése
   const getUserReactionForMessage = () => {
     if (!reactions || !currentUser) return null;
@@ -1225,43 +1222,35 @@ const MessageItem = ({
     
     return userReaction ? userReaction.reaction : null;
   };
-
-  // Gyakran használt emojik
-  const commonEmojis = ["😀", "😂", "😍", "👍", "👎", "❤️", "🔥", "🎉", "👏", "🙏", "😊", "🤔"];
-
-  const renderReactions = (messageId: string, reactions: any[]) => {
-    if (!reactions || reactions.length === 0) return null;
-    
-    console.log(`Reakciók renderelése a(z) ${messageId} üzenethez:`, reactions);
-    
-    // Csoportosítjuk a reakciókat
-    const groupedReactions = reactions.reduce((acc: any, reaction: any) => {
-      const emoji = reaction.reaction;
-      if (!acc[emoji]) {
-        acc[emoji] = [];
+  
+  // Emoji picker bezárása kattintásra
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showEmojiPicker) {
+        const target = event.target as HTMLElement;
+        
+        // Ellenőrizzük, hogy a kattintás a reakció menün kívül történt-e
+        if (!target.closest('.message-item-' + message.id) && !target.closest('.emoji-picker-menu') && !target.closest('.emoji-keyboard')) {
+          setShowReactionMenu(false);
+          setMenuLocked(false);
+        }
       }
-      acc[emoji].push(reaction);
-      return acc;
-    }, {});
+    };
     
-    return (
-      <div className="flex flex-wrap gap-1 mt-1">
-        {Object.entries(groupedReactions).map(([emoji, users]: [string, any[]]) => (
-          <div 
-            key={emoji} 
-            className={`flex items-center bg-gray-100 rounded-full px-2 py-0.5 text-xs cursor-pointer hover:bg-gray-200 ${
-              users.some(r => r.user_id === currentUser?.id) ? 'bg-blue-100 hover:bg-blue-200' : ''
-            }`}
-            onClick={() => onReact(messageId, emoji)}
-          >
-            <span className="mr-1">{emoji}</span>
-            <span>{users.length}</span>
-          </div>
-        ))}
-      </div>
-    );
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showReactionMenu, menuLocked, message.id]);
+  
+  // Egér elhagyja a reakciómenüt
+  const handleMouseLeave = () => {
+    // Csak akkor zárjuk be, ha nincs zárolva a menü
+    if (!menuLocked) {
+      setShowReactionMenu(false);
+    }
   };
-
+  
   return (
     <div className={`flex mb-4 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
       {!isOwnMessage && (
@@ -1285,112 +1274,245 @@ const MessageItem = ({
             {sender?.first_name || ''} {sender?.last_name || ''}
           </div>
         )}
-        <div className={`rounded-lg px-3 py-2 relative group ${
-          isOwnMessage 
-            ? 'bg-blue-500 text-white' 
-            : 'bg-gray-100 text-gray-800'
-        }`}>
-          {renderMessageContent()}
+        <div 
+          className={`rounded-lg px-3 py-2 relative group message-item-${message.id}`}
+          onMouseEnter={() => setShowReactionMenu(true)}
+          onMouseLeave={handleMouseLeave}
+          style={{ 
+            backgroundColor: isOwnMessage ? '#3b82f6' : '#f3f4f6',
+            color: isOwnMessage ? 'white' : '#1f2937',
+            position: 'relative'
+          }}
+        >
+          {message.message_type === 'image' ? (
+            <div className="rounded-lg overflow-hidden max-w-xs">
+              <a href={message.file_url || '#'} target="_blank" rel="noopener noreferrer">
+                <img 
+                  src={message.file_url || ''} 
+                  alt={message.content} 
+                  className="max-w-full h-auto"
+                  loading="lazy"
+                />
+              </a>
+              <div className="text-xs text-gray-500 mt-1">{message.content}</div>
+            </div>
+          ) : message.message_type === 'video' ? (
+            <div className="rounded-lg overflow-hidden max-w-xs">
+              <video 
+                src={message.file_url || ''} 
+                controls 
+                className="max-w-full h-auto"
+                poster={message.thumbnail_url || ''}
+              />
+              <div className="text-xs text-gray-500 mt-1">{message.content}</div>
+            </div>
+          ) : message.message_type === 'file' ? (
+            <a 
+              href={message.file_url || '#'} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <FileText className="h-8 w-8 text-blue-500 mr-3" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{message.content}</p>
+                <p className="text-xs text-gray-500">
+                  {message.file_size ? `${(message.file_size / 1024).toFixed(1)} KB` : 'Fájl'}
+                </p>
+              </div>
+            </a>
+          ) : message.message_type === 'emoji' ? (
+            <span className="text-4xl">{message.content}</span>
+          ) : (
+            <div className="whitespace-pre-wrap break-words">{message.content}</div>
+          )}
           
           {/* Reakciók megjelenítése */}
           <div className="relative">
-            {/* Reakció hozzáadása gomb */}
-            <div className={`absolute ${isOwnMessage ? '-left-12' : '-right-12'} top-0 -translate-y-9 z-10`}>
-              <div className="relative">
+            {/* Reakció menü az üzenet fölött */}
+            {showReactionMenu && (
+              <div 
+                ref={menuRef}
+                className="emoji-picker-menu absolute bg-white shadow-lg rounded-full border border-gray-200 p-1 z-50 flex items-center"
+                style={{ 
+                  bottom: '100%',
+                  left: isOwnMessage ? 'auto' : '0',
+                  right: isOwnMessage ? '0' : 'auto',
+                  marginBottom: '8px',
+                  zIndex: 10
+                }}
+                onMouseEnter={() => setShowReactionMenu(true)}
+                onMouseLeave={handleMouseLeave}
+              >
+                {/* Gyors reakciók */}
+                {['👍', '❤️', '😂', '😮', '😢', '😡'].map((emoji) => (
+                  <Button
+                    key={emoji}
+                    variant="ghost"
+                    size="sm"
+                    className={`h-8 w-8 p-0 rounded-full hover:bg-gray-100 ${
+                      getUserReactionForMessage() === emoji ? 'bg-blue-100' : ''
+                    }`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onReact(message.id, emoji);
+                    }}
+                  >
+                    <span className="text-xl">{emoji}</span>
+                  </Button>
+                ))}
+                
+                {/* Plusz gomb további reakciókhoz */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="emoji-picker-trigger h-8 w-8 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-md border border-gray-200 hover:bg-gray-100"
-                  onClick={() => setShowEmojiPicker(message.id)}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-700 hover:text-gray-700"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuLocked(true);
+                    setShowEmojiKeyboard(message.id);
+                  }}
                 >
-                  <Smile className="h-5 w-5 text-gray-500" />
+                  <Plus className="h-5 w-5" />
                 </Button>
                 
-                {showEmojiPicker === message.id && (
-                  <div className="emoji-picker-menu absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white shadow-lg rounded-full border border-gray-200 p-1 z-50 flex items-center">
+                {/* Menü gomb */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-blue-100 ${getUserReactionForMessage() === "👍" ? "bg-blue-100" : ""}`}
-                      onClick={() => onReact(message.id, "👍")}
+                      className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-700 hover:text-gray-700"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMenuLocked(true);
+                      }}
                     >
-                      <ThumbsUp className="h-5 w-5 text-blue-500" />
+                      <MoreHorizontal className="h-5 w-5" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-red-100 ${getUserReactionForMessage() === "❤️" ? "bg-red-100" : ""}`}
-                      onClick={() => onReact(message.id, "❤️")}
-                    >
-                      <Heart className="h-5 w-5 text-red-500" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-yellow-100 ${getUserReactionForMessage() === "😄" ? "bg-yellow-100" : ""}`}
-                      onClick={() => onReact(message.id, "😄")}
-                    >
-                      <span className="text-lg">😄</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-blue-100 ${getUserReactionForMessage() === "😢" ? "bg-blue-100" : ""}`}
-                      onClick={() => onReact(message.id, "😢")}
-                    >
-                      <Frown className="h-5 w-5 text-blue-500" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-orange-100 ${getUserReactionForMessage() === "😠" ? "bg-orange-100" : ""}`}
-                      onClick={() => onReact(message.id, "😠")}
-                    >
-                      <Angry className="h-5 w-5 text-orange-500" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-8 w-8 p-0 rounded-full hover:bg-yellow-100 ${getUserReactionForMessage() === "😮" ? "bg-yellow-100" : ""}`}
-                      onClick={() => onReact(message.id, "😮")}
-                    >
-                      <span className="text-lg">😮</span>
-                    </Button>
-                    <div className="h-6 border-l border-gray-200 mx-1"></div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent 
+                    align={isOwnMessage ? "end" : "start"}
+                    onInteractOutside={() => setMenuLocked(false)}
+                    className="bg-white border border-gray-200 shadow-md rounded-md z-50"
+                  >
+                    {isOwnMessage && (
+                      <>
+                        <div 
+                          className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded-sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log('Szerkesztés gombra kattintás a MessageItem komponensben');
+                            console.log('Message:', message);
+                            console.log('onEdit függvény típusa:', typeof onEdit);
+                            onEdit(message);
+                            console.log('onEdit függvény meghívva');
+                            setMenuLocked(false);
+                            setShowReactionMenu(false);
+                          }}
                         >
-                          <Plus className="h-5 w-5 text-gray-500" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent 
-                        align="center" 
-                        className="w-36 shadow-lg border-gray-200 bg-white animate-in fade-in-50 zoom-in-95 rounded-xl overflow-hidden"
-                      >
-                        {commonEmojis.map((emoji) => (
-                          <DropdownMenuItem
-                            key={emoji}
-                            className="flex justify-center items-center h-10 w-10 p-0 cursor-pointer hover:bg-gray-100 rounded-md"
-                            onClick={() => onReact(message.id, emoji)}
-                          >
-                            <span className="text-xl">{emoji}</span>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
+                          <Edit className="h-4 w-4 mr-2" />
+                          Szerkesztés
+                        </div>
+                        <div 
+                          className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded-sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDelete(message);
+                            setMenuLocked(false);
+                            setShowReactionMenu(false);
+                          }}
+                        >
+                          <Trash className="h-4 w-4 mr-2" />
+                          Törlés
+                        </div>
+                      </>
+                    )}
+                    <div 
+                      className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded-sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Itt implementálnánk a válasz funkciót
+                        setMenuLocked(false);
+                        setShowReactionMenu(false);
+                      }}
+                    >
+                      <Reply className="h-4 w-4 mr-2" />
+                      Válasz
+                    </div>
+                    <div 
+                      className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 rounded-sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (message.content) {
+                          navigator.clipboard.writeText(message.content);
+                        }
+                        setMenuLocked(false);
+                        setShowReactionMenu(false);
+                      }}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Másolás
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            </div>
+            )}
+            
+            {/* Emoji keyboard a plusz gombra kattintva */}
+            {showEmojiKeyboard === message.id && (
+              <div 
+                className="absolute z-50 emoji-keyboard"
+                style={{ 
+                  bottom: '100%',
+                  left: isOwnMessage ? 'auto' : '0',
+                  right: isOwnMessage ? '0' : 'auto',
+                  marginBottom: '8px',
+                  width: '300px'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EmojiPicker 
+                  onEmojiSelect={(emoji) => {
+                    onReact(message.id, emoji);
+                    setShowEmojiKeyboard(null);
+                    setShowReactionMenu(false);
+                    setMenuLocked(false);
+                  }}
+                  onClose={() => setShowEmojiKeyboard(null)}
+                />
+              </div>
+            )}
             
             {/* Reakciók megjelenítése az üzenet ellentétes oldalán */}
             {reactions && reactions.length > 0 && (
               <div className={`absolute bottom-0 ${isOwnMessage ? 'left-0' : 'right-0'} transform ${isOwnMessage ? '-translate-x-[80%]' : 'translate-x-[80%]'} translate-y-[80%] flex flex-wrap gap-1`}>
-                {renderReactions(message.id, reactions)}
+                {Object.entries(reactions.reduce((acc: any, reaction: any) => {
+                  const emoji = reaction.reaction;
+                  if (!acc[emoji]) {
+                    acc[emoji] = [];
+                  }
+                  acc[emoji].push(reaction);
+                  return acc;
+                }, {})).map(([emoji, users]: [string, any[]]) => (
+                  <div 
+                    key={emoji} 
+                    className={`flex items-center bg-gray-100 rounded-full px-2 py-0.5 text-xs cursor-pointer hover:bg-gray-200 ${
+                      users.some((r: any) => r.user_id === currentUser?.id) ? 'bg-blue-100 hover:bg-blue-200' : ''
+                    }`}
+                    onClick={() => onReact(message.id, emoji)}
+                  >
+                    <span className="mr-1">{emoji}</span>
+                    <span className="font-medium text-gray-800">{users.length}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1405,42 +1527,6 @@ const MessageItem = ({
                 <Check className="h-3 w-3" />
               )}
             </span>
-          )}
-          
-          {/* Szerkesztés/törlés menü */}
-          {isOwnMessage && (
-            <div className="ml-auto">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 w-6 p-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-400/20"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="end" 
-                  className="w-36 shadow-lg border-gray-200 bg-white animate-in fade-in-50 zoom-in-95 rounded-xl overflow-hidden"
-                >
-                  <DropdownMenuItem 
-                    className="text-blue-500 focus:text-blue-500 cursor-pointer flex items-center gap-2 hover:bg-gray-100 focus:bg-gray-100"
-                    onClick={() => onEdit(message, message.content)}
-                  >
-                    <Edit className="h-4 w-4" />
-                    Szerkesztés
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    className="text-red-500 focus:text-red-500 cursor-pointer flex items-center gap-2 hover:bg-gray-100 focus:bg-gray-100"
-                    onClick={() => onDelete(message)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Törlés
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
           )}
         </div>
       </div>

@@ -518,50 +518,63 @@ export const useMessages = () => {
 
   // Üzenet törlése
   const deleteMessage = useCallback(async (messageId: string) => {
+    if (!user) return;
+    
     try {
-      if (!user) throw new Error('A felhasználó nincs bejelentkezve');
-      
       const { error } = await supabase
         .from('messages')
         .delete()
         .eq('id', messageId)
-        .eq('sender_id', user.id);
-        
-      if (error) throw error;
+        .eq('sender_id', user.id); // Csak a saját üzeneteinket törölhetjük
       
-      // Frissítsük a beszélgetéseket a törlés után
-      await fetchConversations();
+      if (error) {
+        console.error('Hiba az üzenet törlésekor:', error);
+        throw error;
+      }
+      
+      // Frissítjük a helyi üzenetlistát
+      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      
       return true;
     } catch (error) {
       console.error('Hiba az üzenet törlése közben:', error);
-      throw error;
+      return false;
     }
-  }, [user, fetchConversations]);
+  }, [user]);
 
   // Üzenet szerkesztése
-  const updateMessage = useCallback(async (messageId: string, content: string) => {
+  const updateMessage = useCallback(async (messageId: string, newContent: string) => {
+    if (!user) return;
+    
     try {
-      if (!user) throw new Error('A felhasználó nincs bejelentkezve');
+      console.log(`Üzenet szerkesztése: ${messageId}, új tartalom: ${newContent}`);
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .update({ content })
+        .update({ content: newContent })
         .eq('id', messageId)
-        .eq('sender_id', user.id);
-        
-      if (error) throw error;
+        .eq('sender_id', user.id) // Csak a saját üzeneteinket szerkeszthetjük
+        .select()
+        .single();
       
-      // Frissítsük a beszélgetéseket és az üzeneteket a szerkesztés után
-      if (currentConversationId) {
-        await fetchMessages(currentConversationId);
+      if (error) {
+        console.error('Hiba az üzenet szerkesztésekor:', error);
+        throw error;
       }
-      await fetchConversations();
-      return true;
+      
+      console.log('Szerkesztett üzenet:', data);
+      
+      // Frissítjük a helyi üzenetlistát
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId ? { ...msg, content: newContent } : msg
+      ));
+      
+      return data;
     } catch (error) {
       console.error('Hiba az üzenet szerkesztése közben:', error);
       throw error;
     }
-  }, [user, fetchConversations, fetchMessages, currentConversationId]);
+  }, [user]);
 
   // Reakciók kezelése
   const getMessageReactions = useCallback(async (messageId: string) => {

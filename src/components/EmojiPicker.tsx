@@ -42,13 +42,13 @@ const EmojiPicker: React.FC<EmojiPickerProps> = ({ onEmojiSelect, onClose }) => 
 
   return (
     <div className="bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-md">
-      <div className="p-3 border-b flex justify-between items-center">
-        <h3 className="font-medium">Emoji kiválasztása</h3>
+      <div className="p-3 border-b flex justify-between items-center bg-gray-50">
+        <h3 className="font-medium text-gray-800">Emoji kiválasztása</h3>
         <Button
           variant="ghost"
           size="sm"
           onClick={onClose}
-          className="h-8 w-8 p-0 rounded-full"
+          className="h-8 w-8 p-0 rounded-full text-gray-700 hover:bg-gray-200"
         >
           <X className="h-4 w-4" />
         </Button>
