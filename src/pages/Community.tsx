@@ -46,7 +46,6 @@ const Community = () => {
 
   // 监听认证状态变化
   useEffect(() => {
-    // 初始检查用户状态
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       console.log('Fetched user:', user);
@@ -54,7 +53,6 @@ const Community = () => {
     };
     fetchUser();
 
-    // 监听认证状态变化
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth state changed:', event, session);
       if (event === 'SIGNED_IN') {
@@ -64,12 +62,12 @@ const Community = () => {
       }
     });
 
-    // 清理监听器
     return () => {
       authListener.subscription.unsubscribe();
     };
   }, []);
 
+  // 初始加载帖子
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -111,6 +109,93 @@ const Community = () => {
     fetchPosts();
   }, [currentUserId]);
 
+  // 实时监听点赞变化
+  useEffect(() => {
+    const likesSubscription = supabase
+      .channel('likes-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'likes' },
+        (payload) => {
+          console.log('Likes change detected:', payload);
+          const { eventType, new: newLike, old: oldLike } = payload;
+
+          setPosts((prevPosts) =>
+            prevPosts.map((post) => {
+              if (eventType === 'INSERT' && newLike.post_id === post.id) {
+                return {
+                  ...post,
+                  likes: post.likes + 1,
+                  likedBy: [...post.likedBy, newLike.user_id],
+                };
+              } else if (eventType === 'DELETE' && oldLike.post_id === post.id) {
+                return {
+                  ...post,
+                  likes: post.likes - 1,
+                  likedBy: post.likedBy.filter((uid) => uid !== oldLike.user_id),
+                };
+              }
+              return post;
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(likesSubscription);
+    };
+  }, []);
+
+  // 实时监听评论变化
+  useEffect(() => {
+    const commentsSubscription = supabase
+      .channel('comments-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'comments' },
+        async (payload) => {
+          console.log('Comments change detected:', payload);
+          const newComment = payload.new;
+
+          // 获取评论作者信息
+          const { data: authorData, error: authorError } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .eq('id', newComment.author_id)
+            .single();
+
+          if (authorError) {
+            console.error('Error fetching comment author:', authorError.message);
+            return;
+          }
+
+          const formattedComment = {
+            id: newComment.id,
+            content: newComment.content,
+            created_at: newComment.created_at,
+            author: {
+              first_name: authorData.first_name,
+              last_name: authorData.last_name,
+            },
+          };
+
+          setPosts((prevPosts) =>
+            prevPosts.map((post) =>
+              post.id === newComment.post_id
+                ? { ...post, comments: [...post.comments, formattedComment] }
+                : post
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(commentsSubscription);
+    };
+  }, []);
+
   const filteredPosts = activeTab === 'all'
     ? posts
     : posts.filter((post) => post.author.user_type === 'trainer');
@@ -135,11 +220,6 @@ const Community = () => {
           .from('likes')
           .insert({ post_id: id, user_id: currentUserId });
         if (insertError) throw insertError;
-        setPosts(posts.map((p) =>
-          p.id === id
-            ? { ...p, likes: p.likes + 1, likedBy: [...p.likedBy, currentUserId] }
-            : p
-        ));
       } else {
         const { error: deleteError } = await supabase
           .from('likes')
@@ -147,14 +227,9 @@ const Community = () => {
           .eq('post_id', id)
           .eq('user_id', currentUserId);
         if (deleteError) throw deleteError;
-        setPosts(posts.map((p) =>
-          p.id === id
-            ? { ...p, likes: p.likes - 1, likedBy: p.likedBy.filter((uid) => uid !== currentUserId) }
-            : p
-        ));
       }
     } catch (error) {
-      console.error('Error liking post:', error.message);
+      console.error('Error liking post:', (error as Error).message);
     }
   };
 
@@ -180,7 +255,7 @@ const Community = () => {
       setPosts(posts.filter((p) => p.id !== id));
     } catch (error) {
       setDeleteError('Hiba történt a bejegyzés törlése során. Kérjük, próbáld újra!');
-      console.error('Error deleting post:', error.message);
+      console.error('Error deleting post:', (error as Error).message);
     } finally {
       setDeleteLoading(null);
     }
@@ -201,32 +276,16 @@ const Community = () => {
     setCommentError(null);
     setCommentLoading(id);
     try {
-      const { data: newComment, error } = await supabase
+      const { error } = await supabase
         .from('comments')
-        .insert({ post_id: id, author_id: currentUserId, content: comment })
-        .select('*, author:profiles(id, first_name, last_name)')
-        .single();
+        .insert({ post_id: id, author_id: currentUserId, content: comment });
 
       if (error) throw error;
 
-      const { data: post, error: fetchError } = await supabase
-        .from('posts')
-        .select(`
-          *,
-          author:profiles(id, first_name, last_name, avatar_url, user_type),
-          comments(*, author:profiles(id, first_name, last_name), created_at)
-        `)
-        .eq('id', id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const { data: likes } = await supabase.from('likes').select('user_id').eq('post_id', id);
-      setPosts(posts.map((p) => (p.id === id ? { ...post, likes: likes.length, likedBy: likes.map((l) => l.user_id) } : p)));
       setCommentInputs({ ...commentInputs, [id]: '' });
     } catch (error) {
       setCommentError('Hiba történt a hozzászólás hozzáadása során. Kérjük, próbáld újra!');
-      console.error('Error adding comment:', error.message);
+      console.error('Error adding comment:', (error as Error).message);
     } finally {
       setCommentLoading(null);
     }
@@ -347,7 +406,7 @@ const Community = () => {
         setPosts(posts.map((p) => (p.id === postId ? { ...p, isFollowed: true } : p)));
       }
     } catch (error) {
-      console.error('Error handling follow:', error.message);
+      console.error('Error handling follow:', (error as Error).message);
     } finally {
       setFollowLoading(null);
     }
@@ -356,7 +415,6 @@ const Community = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
-        {/* 添加新帖子按钮 */}
         {currentUserId && (
           <div className="mt-8">
             <button
@@ -368,7 +426,6 @@ const Community = () => {
           </div>
         )}
 
-        {/* 搜索和筛选 */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -396,7 +453,6 @@ const Community = () => {
           </div>
         </div>
 
-        {/* 帖子列表 */}
         <div className="mt-8 space-y-6">
           {filteredPosts.length > 0 ? (
             filteredPosts.map((post) => (
@@ -574,7 +630,6 @@ const Community = () => {
           )}
         </div>
 
-        {/* 新帖子模态窗口 */}
         {isModalOpen && currentUserId && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -617,7 +672,6 @@ const Community = () => {
           </div>
         )}
 
-        {/* 登录提示模态窗口 */}
         {isLoginModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-sm">
