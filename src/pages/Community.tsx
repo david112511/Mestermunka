@@ -43,6 +43,7 @@ const Community = () => {
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [newPostMedia, setNewPostMedia] = useState<File | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState<{ postId: string; message: string } | null>(null); // 分享成功消息
 
   // 监听认证状态变化
   useEffect(() => {
@@ -158,7 +159,6 @@ const Community = () => {
           console.log('Comments change detected:', payload);
           const newComment = payload.new;
 
-          // 获取评论作者信息
           const { data: authorData, error: authorError } = await supabase
             .from('profiles')
             .select('id, first_name, last_name')
@@ -412,6 +412,20 @@ const Community = () => {
     }
   };
 
+  const handleShare = (postId: string) => {
+    const postUrl = `${window.location.origin}/personal-profile/${posts.find(p => p.id === postId)?.author_id}#${postId}`;
+    navigator.clipboard.writeText(postUrl)
+      .then(() => {
+        setShareMessage({ postId, message: 'Link másolva a vágólapra!' });
+        setTimeout(() => setShareMessage(null), 2000); // 2秒后清除消息
+      })
+      .catch((error) => {
+        console.error('Error copying link:', error);
+        setShareMessage({ postId, message: 'Hiba a link másolásakor!' });
+        setTimeout(() => setShareMessage(null), 2000);
+      });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
@@ -530,7 +544,10 @@ const Community = () => {
                       <MessageCircle className="h-5 w-5 mr-1" />
                       <span>{post.comments.length}</span>
                     </button>
-                    <button className="flex items-center text-gray-600 hover:text-primary transition-colors">
+                    <button
+                      className="flex items-center text-gray-600 hover:text-primary transition-colors"
+                      onClick={() => handleShare(post.id)}
+                    >
                       <Share2 className="h-5 w-5" />
                     </button>
                   </div>
@@ -553,6 +570,10 @@ const Community = () => {
                     </button>
                   )}
                 </div>
+
+                {shareMessage && shareMessage.postId === post.id && (
+                  <p className="text-green-600 text-sm mt-2">{shareMessage.message}</p>
+                )}
 
                 {openCommentSections[post.id] && (
                   <div className="mt-4 bg-white rounded-xl shadow-sm p-4">

@@ -35,6 +35,7 @@ function App() {
                 <Route path="/personal-profile/:userId" element={<PersonalProfile />} />
                 <Route path="/calendar" element={<Calendar />} />
                 <Route path="/messages" element={<Messages />} />
+                <Route path="/messages/:userId" element={<Messages />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>
