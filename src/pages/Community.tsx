@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search } from 'lucide-react';
+import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search, Trash2 } from 'lucide-react'; // 添加 Trash2 图标
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 
@@ -20,7 +20,7 @@ interface Post {
     id: string;
     content: string;
     created_at: string;
-    author: { first_name: string; last_name: string };
+    author: { first_name: string; last_name: string; id: string }; // 添加 author.id
   }>;
   likes: number;
   likedBy: string[];
@@ -43,7 +43,7 @@ const Community = () => {
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [newPostMedia, setNewPostMedia] = useState<File | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [shareMessage, setShareMessage] = useState<{ postId: string; message: string } | null>(null); // 分享成功消息
+  const [shareMessage, setShareMessage] = useState<{ postId: string; message: string } | null>(null);
 
   // 监听认证状态变化
   useEffect(() => {
@@ -99,6 +99,14 @@ const Community = () => {
           likes: likes.filter((like) => like.post_id === post.id).length,
           likedBy: likes.filter((like) => like.post_id === post.id).map((like) => like.user_id),
           isFollowed: followedIds.includes(post.author_id),
+          comments: post.comments.map((comment) => ({
+            ...comment,
+            author: {
+              id: comment.author.id, // 添加 author.id
+              first_name: comment.author.first_name,
+              last_name: comment.author.last_name,
+            },
+          })),
         }));
 
         setPosts(postsWithLikes);
@@ -148,45 +156,56 @@ const Community = () => {
     };
   }, []);
 
-  // 实时监听评论变化
+  // 实时监听评论变化（包括插入和删除）
   useEffect(() => {
     const commentsSubscription = supabase
       .channel('comments-changes')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'comments' },
+        { event: '*', schema: 'public', table: 'comments' },
         async (payload) => {
           console.log('Comments change detected:', payload);
-          const newComment = payload.new;
+          if (payload.eventType === 'INSERT') {
+            const newComment = payload.new;
+            const { data: authorData, error: authorError } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name')
+              .eq('id', newComment.author_id)
+              .single();
 
-          const { data: authorData, error: authorError } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .eq('id', newComment.author_id)
-            .single();
+            if (authorError) {
+              console.error('Error fetching comment author:', authorError.message);
+              return;
+            }
 
-          if (authorError) {
-            console.error('Error fetching comment author:', authorError.message);
-            return;
+            const formattedComment = {
+              id: newComment.id,
+              content: newComment.content,
+              created_at: newComment.created_at,
+              author: {
+                id: authorData.id,
+                first_name: authorData.first_name,
+                last_name: authorData.last_name,
+              },
+            };
+
+            setPosts((prevPosts) =>
+              prevPosts.map((post) =>
+                post.id === newComment.post_id
+                  ? { ...post, comments: [...post.comments, formattedComment] }
+                  : post
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const oldComment = payload.old;
+            setPosts((prevPosts) =>
+              prevPosts.map((post) =>
+                post.id === oldComment.post_id
+                  ? { ...post, comments: post.comments.filter((c) => c.id !== oldComment.id) }
+                  : post
+              )
+            );
           }
-
-          const formattedComment = {
-            id: newComment.id,
-            content: newComment.content,
-            created_at: newComment.created_at,
-            author: {
-              first_name: authorData.first_name,
-              last_name: authorData.last_name,
-            },
-          };
-
-          setPosts((prevPosts) =>
-            prevPosts.map((post) =>
-              post.id === newComment.post_id
-                ? { ...post, comments: [...post.comments, formattedComment] }
-                : post
-            )
-          );
         }
       )
       .subscribe();
@@ -288,6 +307,35 @@ const Community = () => {
       console.error('Error adding comment:', (error as Error).message);
     } finally {
       setCommentLoading(null);
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!currentUserId) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('author_id', currentUserId);
+
+      if (error) throw error;
+
+      // 本地更新状态（实时监听会自动处理，但这里手动更新以确保即时反馈）
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { ...post, comments: post.comments.filter((c) => c.id !== commentId) }
+            : post
+        )
+      );
+    } catch (error) {
+      console.error('Error deleting comment:', (error as Error).message);
+      setCommentError('Hiba történt a hozzászólás törlése során. Kérjük, próbáld újra!');
     }
   };
 
@@ -417,7 +465,7 @@ const Community = () => {
     navigator.clipboard.writeText(postUrl)
       .then(() => {
         setShareMessage({ postId, message: 'Link másolva a vágólapra!' });
-        setTimeout(() => setShareMessage(null), 2000); // 2秒后清除消息
+        setTimeout(() => setShareMessage(null), 2000);
       })
       .catch((error) => {
         console.error('Error copying link:', error);
@@ -585,23 +633,29 @@ const Community = () => {
                           .map((comment) => (
                             <div
                               key={comment.id}
-                              className="border-b border-gray-200 pb-3 last:border-b-0"
+                              className="border-b border-gray-200 pb-3 last:border-b-0 flex justify-between items-start"
                             >
-                              <div className="flex items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-center">
-                                    <span className="font-semibold text-gray-800">
-                                      {comment.author?.first_name || 'Névtelen'} {comment.author?.last_name || ''}:
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <span className="font-semibold text-gray-800">
+                                    {comment.author?.first_name || 'Névtelen'} {comment.author?.last_name || ''}:
+                                  </span>
+                                  {comment.created_at && (
+                                    <span className="ml-2 text-xs text-gray-400">
+                                      {new Date(comment.created_at).toLocaleString()}
                                     </span>
-                                    {comment.created_at && (
-                                      <span className="ml-2 text-xs text-gray-400">
-                                        {new Date(comment.created_at).toLocaleString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-gray-700 mt-1">{comment.content}</p>
+                                  )}
                                 </div>
+                                <p className="text-gray-700 mt-1">{comment.content}</p>
                               </div>
+                              {comment.author.id === currentUserId && (
+                                <button
+                                  className="text-red-500 hover:text-red-600 transition-colors ml-2"
+                                  onClick={() => handleDeleteComment(post.id, comment.id)}
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              )}
                             </div>
                           ))
                       ) : (
