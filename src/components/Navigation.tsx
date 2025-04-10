@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X, User, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +29,22 @@ const Navigation = () => {
   const { user } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   const { toast } = useToast();
+
+  // Eseményfigyelő hozzáadása a regisztrációs párbeszédablak megnyitásához
+  useEffect(() => {
+    const handleOpenRegisterDialog = () => {
+      setRegisterOpen(true);
+      setRegistrationType('selection');
+    };
+
+    // Eseményfigyelő hozzáadása
+    window.addEventListener('open-register-dialog', handleOpenRegisterDialog);
+
+    // Eseményfigyelő eltávolítása a komponens eltávolításakor
+    return () => {
+      window.removeEventListener('open-register-dialog', handleOpenRegisterDialog);
+    };
+  }, []);
 
   const navItems = [
     { name: 'Edzők', path: '/coaches' },
@@ -102,10 +118,10 @@ const Navigation = () => {
                         Bejelentkezés
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="sm:max-w-[425px] bg-white rounded-xl shadow-xl border-0">
                       <DialogHeader>
-                        <DialogTitle>Üdvözöljük újra!</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-2xl font-bold text-center">Üdvözöljük újra!</DialogTitle>
+                        <DialogDescription className="text-center text-gray-500">
                           Jelentkezzen be fiókjába.
                         </DialogDescription>
                       </DialogHeader>
@@ -126,10 +142,10 @@ const Navigation = () => {
                         Regisztráció
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[600px]">
+                    <DialogContent className="sm:max-w-[600px] bg-white rounded-xl shadow-xl border-0">
                       <DialogHeader>
-                        <DialogTitle>Regisztráció</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-2xl font-bold text-center">Regisztráció</DialogTitle>
+                        <DialogDescription className="text-center text-gray-500">
                           {registrationType === 'selection' 
                             ? 'Válassza ki a fiók típusát'
                             : registrationType === 'trainer'
@@ -188,10 +204,10 @@ const Navigation = () => {
                     Bejelentkezés
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[425px] bg-white rounded-xl shadow-xl border-0">
                   <DialogHeader>
-                    <DialogTitle>Üdvözöljük újra!</DialogTitle>
-                    <DialogDescription>
+                    <DialogTitle className="text-2xl font-bold text-center">Üdvözöljük újra!</DialogTitle>
+                    <DialogDescription className="text-center text-gray-500">
                       Jelentkezzen be fiókjába.
                     </DialogDescription>
                   </DialogHeader>
@@ -212,10 +228,10 @@ const Navigation = () => {
                     Regisztráció
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="sm:max-w-[600px] bg-white rounded-xl shadow-xl border-0">
                   <DialogHeader>
-                    <DialogTitle>Regisztráció</DialogTitle>
-                    <DialogDescription>
+                    <DialogTitle className="text-2xl font-bold text-center">Regisztráció</DialogTitle>
+                    <DialogDescription className="text-center text-gray-500">
                       {registrationType === 'selection' 
                         ? 'Válassza ki a fiók típusát'
                         : registrationType === 'trainer'
