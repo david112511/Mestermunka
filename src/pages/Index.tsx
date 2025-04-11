@@ -7,9 +7,13 @@ import Footer from '../components/Footer';
 
 const Index = () => {
   const navigate = useNavigate();
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
 
+  // Ezt a függvényt használjuk a regisztrációs párbeszédablak megnyitásához
   const handleRegister = () => {
-    navigate("/register");
+    // Eseményt küldünk a Navigation komponensnek, hogy nyissa meg a regisztrációs párbeszédablakot
+    const event = new CustomEvent('open-register-dialog');
+    window.dispatchEvent(event);
   };
 
   const handleFindCoach = () => {

@@ -20,6 +20,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useNotifications, Notification } from '@/hooks/useNotifications';
+import { format } from 'date-fns';
+import { hu } from 'date-fns/locale';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { useState, useEffect, useRef } from 'react';
 
 interface ProfileMenuProps {
   profile: UserProfile | null;
@@ -27,6 +38,47 @@ interface ProfileMenuProps {
 
 export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
   const { toast } = useToast();
+  const { 
+    notifications, 
+    unreadCount, 
+    markAsRead, 
+    markAllAsRead,
+    deleteNotification,
+    fetchNotifications
+  } = useNotifications();
+  
+  const [localNotifications, setLocalNotifications] = useState<Notification[]>([]);
+  const [localUnreadCount, setLocalUnreadCount] = useState<number>(0);
+  const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  const popoverRef = useRef<HTMLButtonElement>(null);
+  
+  // Frissítjük a lokális állapotot, amikor a notifications változik
+  useEffect(() => {
+    setLocalNotifications(notifications);
+    setLocalUnreadCount(unreadCount);
+    
+    // Ha új értesítés érkezik és a popover nyitva van, vizuálisan jelezzük
+    if (isPopoverOpen && notifications.length > localNotifications.length) {
+      // Új értesítés érkezett, miközben a popover nyitva volt
+      // Itt akár animációt is hozzáadhatnánk
+      const newNotification = notifications.find(
+        n => !localNotifications.some(ln => ln.id === n.id)
+      );
+      
+      if (newNotification) {
+        console.log('Új értesítés érkezett a menü nyitott állapotában:', newNotification);
+      }
+    }
+  }, [notifications, unreadCount, isPopoverOpen]);
+  
+  // Amikor a popover kinyílik, frissítjük az értesítéseket
+  const handlePopoverOpenChange = (open: boolean) => {
+    setIsPopoverOpen(open);
+    if (open) {
+      // Frissítjük az értesítéseket, amikor kinyitjuk a menüt
+      fetchNotifications();
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -58,6 +110,39 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
       return firstName.charAt(0);
     } else {
       return 'U';
+    }
+  };
+
+  // Értesítés kezelése kattintáskor
+  const handleNotificationClick = (notification: any) => {
+    // Megjelöljük olvasottként
+    markAsRead(notification.id);
+    
+    // Navigálunk a megfelelő oldalra az értesítés típusa alapján
+    if (notification.type === 'message' && notification.reference_id) {
+      // Ha üzenet értesítés, akkor a beszélgetéshez navigálunk
+      if (notification.sender_id) {
+        window.location.href = `/messages/${notification.sender_id}`;
+      } else {
+        window.location.href = '/messages';
+      }
+    } else if (notification.type === 'appointment' && notification.reference_id) {
+      // Ha időpontfoglalás értesítés, akkor a naptárhoz navigálunk
+      window.location.href = '/calendar';
+    }
+  };
+
+  // Értesítés ikon megjelenítése
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'message':
+        return '💬';
+      case 'appointment':
+        return '📅';
+      case 'system':
+        return '🔔';
+      default:
+        return '🔔';
     }
   };
 
@@ -124,12 +209,88 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
         </DropdownMenuContent>
       </DropdownMenu>
       {/* Értesítések ikon */}
-      <div className="relative">
-        <button className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-700/30 hover:bg-gray-700/50 transition-colors">
-          <Bell className="h-5 w-5 text-white" />
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">3</span>
-        </button>
-      </div>
+      <Popover onOpenChange={handlePopoverOpenChange}>
+        <PopoverTrigger asChild>
+          <button 
+            ref={popoverRef}
+            className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-700/30 hover:bg-gray-700/50 transition-colors relative"
+          >
+            <Bell className="h-5 w-5 text-white" />
+            {localUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {localUnreadCount > 9 ? '9+' : localUnreadCount}
+              </span>
+            )}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80 p-0 bg-white border-0 shadow-lg rounded-lg" align="end">
+          <div className="flex items-center justify-between p-4">
+            <h4 className="text-sm font-medium">Értesítések</h4>
+            {localUnreadCount > 0 && (
+              <button 
+                onClick={() => markAllAsRead()}
+                className="text-xs text-muted-foreground hover:text-gray-900"
+              >
+                Összes olvasottnak jelölése
+              </button>
+            )}
+          </div>
+          <Separator />
+          <ScrollArea className="h-[300px]">
+            {localNotifications.length === 0 ? (
+              <div className="flex h-full items-center justify-center p-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Nincsenek értesítések
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {localNotifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`flex items-start gap-3 p-3 hover:bg-muted/50 cursor-pointer ${
+                      !notification.is_read ? 'bg-muted/30' : ''
+                    }`}
+                    onClick={() => handleNotificationClick(notification)}
+                  >
+                    {notification.sender ? (
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={notification.sender.avatar_url} alt={`${notification.sender.first_name} ${notification.sender.last_name}`} />
+                        <AvatarFallback>
+                          {notification.sender.first_name.charAt(0)}
+                          {notification.sender.last_name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                        <span>{getNotificationIcon(notification.type)}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm">
+                        {notification.content}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(notification.created_at), 'MMM d, HH:mm', { locale: hu })}
+                      </p>
+                    </div>
+                    <button
+                      className="h-6 w-6 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteNotification(notification.id);
+                      }}
+                    >
+                      <span className="sr-only">Törlés</span>
+                      <span className="h-3 w-3">×</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 };

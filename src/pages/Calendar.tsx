@@ -22,6 +22,9 @@ import { useSearchParams } from 'react-router-dom';
 import TrainerAvailabilityCalendar from '@/components/TrainerAvailabilityCalendar';
 import { Switch } from "@/components/ui/switch";
 import RecurringEventDialog from '@/components/RecurringEventDialog';
+import WeekView from '@/components/WeekView';
+import DayView from '@/components/DayView';
+import MonthView from '@/components/MonthView';
 
 // Esemény típusok
 type EventType = 'personal' | 'training' | 'group';
@@ -752,74 +755,27 @@ const resetNewEvent = () => {
               </div>
 
               <TabsContent value="month" className="mt-2">
-                <div className="grid grid-cols-7 gap-2">
-                  {/* Hét napjai */}
-                  {['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'].map((day, index) => (
-                    <div key={index} className="text-center font-medium text-gray-500 py-2">
-                      {day}
-                    </div>
-                  ))}
-                  
-                  {/* Naptár napjai */}
-                  {daysInMonth.map((day, index) => {
-                    const dayEvents = getEventsForDay(day);
-                    const isToday = isSameDay(day, new Date());
-                    const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-                    const isCurrentMonth = isSameMonth(day, currentDate);
-                    
-                    return (
-                      <div
-                        key={index}
-                        className={`
-                          min-h-[100px] border rounded-lg p-2 transition-colors
-                          ${isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400'}
-                          ${isToday ? 'border-primary' : 'border-gray-200'}
-                          ${isSelected ? 'ring-2 ring-primary ring-opacity-50' : ''}
-                          hover:border-primary cursor-pointer
-                        `}
-                        onClick={() => handleSelectDay(day)}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className={`text-sm font-medium ${isToday ? 'text-primary' : ''}`}>
-                            {format(day, 'd')}
-                          </span>
-                          {dayEvents.length > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              {dayEvents.length}
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="space-y-1 mt-1">
-                          {dayEvents.slice(0, 3).map((event, eventIndex) => (
-                            <div
-                              key={eventIndex}
-                              className={`text-xs px-1.5 py-0.5 rounded truncate text-white ${getEventTypeColor(event.type)}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectEvent(event);
-                              }}
-                            >
-                              {format(parseISO(event.start_time), 'HH:mm')} {event.title}
-                            </div>
-                          ))}
-                          
-                          {dayEvents.length > 3 && (
-                            <div className="text-xs text-gray-500 pl-1">
-                              +{dayEvents.length - 3} további
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <MonthView 
+                  currentDate={currentDate}
+                  events={events}
+                  onSelectDay={handleSelectDay}
+                  onSelectEvent={handleSelectEvent}
+                  getEventTypeColor={getEventTypeColor}
+                  selectedDate={selectedDate}
+                />
               </TabsContent>
 
               <TabsContent value="week" className="mt-2">
                 <Card>
                   <CardContent className="p-6">
-                    <p className="text-center text-gray-500">Heti nézet hamarosan...</p>
+                    <WeekView 
+                      currentDate={currentDate}
+                      events={events}
+                      onSelectDay={handleSelectDay}
+                      onSelectEvent={handleSelectEvent}
+                      setActiveView={setActiveView}
+                      getEventTypeColor={getEventTypeColor}
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -827,7 +783,13 @@ const resetNewEvent = () => {
               <TabsContent value="day" className="mt-2">
                 <Card>
                   <CardContent className="p-6">
-                    <p className="text-center text-gray-500">Napi nézet hamarosan...</p>
+                    <DayView 
+                      currentDate={currentDate}
+                      events={events}
+                      onSelectDay={handleSelectDay}
+                      onSelectEvent={handleSelectEvent}
+                      getEventTypeColor={getEventTypeColor}
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>

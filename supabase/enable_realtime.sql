@@ -1,4 +1,4 @@
--- Engedélyezzük a realtime funkcionalitást a message_reactions táblához
+-- Engedélyezzük a realtime funkcionalitást a szükséges táblákhoz
 BEGIN;
   -- Ellenőrizzük, hogy létezik-e a realtime publikáció
   DO $$
@@ -13,15 +13,12 @@ BEGIN;
     END IF;
   END
   $$;
-
-  -- Hozzáadjuk a message_reactions táblát a publikációhoz
-  ALTER PUBLICATION supabase_realtime ADD TABLE public.message_reactions;
   
   -- Ellenőrizzük, hogy mely táblák vannak már a publikációban
-  -- és hozzáadjuk a többi szükséges táblát is, ha még nincsenek benne
+  -- és hozzáadjuk a szükséges táblákat, ha még nincsenek benne
   DO $$
   DECLARE
-    tables_to_add text[] := ARRAY['messages', 'conversations', 'conversation_participants', 'message_reactions'];
+    tables_to_add text[] := ARRAY['messages', 'conversations', 'conversation_participants', 'message_reactions', 'notifications'];
     table_name text;
   BEGIN
     FOREACH table_name IN ARRAY tables_to_add
