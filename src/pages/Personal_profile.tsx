@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Navigation from '../components/Navigation';
-import { Heart, Share2, MessageCircle, MessageSquare } from 'lucide-react';
+import { Heart, Share2, MessageCircle, MessageSquare, UserPlus } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -43,6 +43,9 @@ const PersonalProfile = () => {
   const [openCommentSections, setOpenCommentSections] = useState<{ [key: string]: boolean }>({});
   const [commentLoading, setCommentLoading] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false); // 关注状态
+  const [followLoading, setFollowLoading] = useState(false); // 关注加载状态
+  const [followSuccess, setFollowSuccess] = useState(false); // 关注成功动画状态
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -82,6 +85,18 @@ const PersonalProfile = () => {
 
         const followersCount = followersData.length;
         setProfile({ ...profileData, followersCount });
+
+        // 检查当前用户是否已关注
+        if (currentUserId) {
+          const { data: followData, error: followError } = await supabase
+            .from('follows')
+            .select('id')
+            .eq('follower_id', currentUserId)
+            .eq('followed_id', userId);
+
+          if (followError) throw followError;
+          setIsFollowing(followData.length > 0);
+        }
 
         const { data: postsData, error: postsError } = await supabase
           .from('posts')
@@ -126,7 +141,7 @@ const PersonalProfile = () => {
     };
 
     fetchProfileAndPosts();
-  }, [userId]);
+  }, [userId, currentUserId]);
 
   useEffect(() => {
     const likesSubscription = supabase
@@ -304,6 +319,48 @@ const PersonalProfile = () => {
     }
   };
 
+  const handleFollow = async () => {
+    if (!currentUserId) {
+      alert('Kérjük, jelentkezz be a követéshez!');
+      return;
+    }
+    if (!userId) return;
+
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        // 取消关注
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', currentUserId)
+          .eq('followed_id', userId);
+
+        if (error) throw error;
+        setIsFollowing(false);
+        setProfile((prev) => prev ? { ...prev, followersCount: prev.followersCount - 1 } : null);
+      } else {
+        // 添加关注
+        const { error } = await supabase
+          .from('follows')
+          .insert({ follower_id: currentUserId, followed_id: userId });
+
+        if (error) throw error;
+        setFollowSuccess(true); // 显示成功动画
+        setTimeout(() => {
+          setFollowSuccess(false);
+          setIsFollowing(true);
+          setProfile((prev) => prev ? { ...prev, followersCount: prev.followersCount + 1 } : null);
+        }, 1000); // 1秒后变为“已关注”
+      }
+    } catch (error) {
+      console.error('Error handling follow:', (error as Error).message);
+      alert('Hiba történt a követés során!');
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -337,9 +394,39 @@ const PersonalProfile = () => {
                 <h1 className="text-2xl font-bold text-gray-900">
                   {profile.first_name} {profile.last_name}
                 </h1>
-                <p className="text-gray-600">
-                  {profile.user_type === 'trainer' ? 'Fitness Edző' : 'Közösségi Tag'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-600">
+                    {profile.user_type === 'trainer' ? 'Fitness Edző' : 'Közösségi Tag'}
+                  </p>
+                  {currentUserId !== userId && (
+                    <button
+                      className={`flex items-center px-3 py-1 rounded-lg transition-colors ${
+                        followLoading
+                          ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                          : followSuccess
+                          ? 'bg-green-500 text-white'
+                          : isFollowing
+                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                      }`}
+                      onClick={handleFollow}
+                      disabled={followLoading}
+                    >
+                      {followLoading ? (
+                        'Feldolgozás...'
+                      ) : followSuccess ? (
+                        '✅'
+                      ) : isFollowing ? (
+                        'Követed'
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Követés
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-6">
@@ -350,9 +437,7 @@ const PersonalProfile = () => {
                 <span>
                   <strong>Összes kedvelés:</strong> {totalLikes}
                 </span>
-                
               </div>
-              {/* 保留右侧的原有私聊按钮 */}
               {currentUserId !== userId && (
                 <button
                   className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
