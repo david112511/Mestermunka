@@ -266,28 +266,13 @@ export const useNotifications = () => {
           async (payload) => {
             console.log('Értesítés esemény:', payload);
             
-            // Ha új értesítés érkezett
+            // Minden eseménynél frissítjük az értesítéseket
+            // Ez biztosítja, hogy a komponensek mindig a legfrissebb adatokat jelenítsék meg
+            await fetchNotifications();
+            
+            // Ha új értesítés érkezett, toast üzenetet is megjelenítünk
             if (payload.eventType === 'INSERT') {
               const newNotification = payload.new as Notification;
-              
-              // Ha van sender_id, lekérjük a küldő adatait
-              if (newNotification.sender_id) {
-                const { data: senderData, error: senderError } = await supabase
-                  .from('profiles')
-                  .select('id, first_name, last_name, avatar_url')
-                  .eq('id', newNotification.sender_id)
-                  .single();
-                
-                if (!senderError && senderData) {
-                  newNotification.sender = senderData;
-                }
-              }
-              
-              // Hozzáadjuk az új értesítést a listához
-              setNotifications(prev => [newNotification, ...prev]);
-              
-              // Növeljük az olvasatlan értesítések számát
-              setUnreadCount(prev => prev + 1);
               
               // Megjelenítünk egy toast üzenetet
               toast({
@@ -295,38 +280,6 @@ export const useNotifications = () => {
                 description: newNotification.content,
                 variant: 'default',
               });
-            }
-            // Ha egy értesítést olvasottként jelöltek
-            else if (payload.eventType === 'UPDATE') {
-              const updatedNotification = payload.new as Notification;
-              
-              // Frissítjük a helyi állapotot
-              setNotifications(prev => 
-                prev.map(notification => 
-                  notification.id === updatedNotification.id 
-                    ? { ...notification, ...updatedNotification } 
-                    : notification
-                )
-              );
-              
-              // Ha olvasottként jelölték, frissítjük az olvasatlan értesítések számát
-              if (updatedNotification.is_read && !payload.old.is_read) {
-                setUnreadCount(prev => Math.max(0, prev - 1));
-              }
-            }
-            // Ha egy értesítést töröltek
-            else if (payload.eventType === 'DELETE') {
-              const deletedNotification = payload.old as Notification;
-              
-              // Frissítjük a helyi állapotot
-              setNotifications(prev => 
-                prev.filter(notification => notification.id !== deletedNotification.id)
-              );
-              
-              // Ha az értesítés olvasatlan volt, frissítjük az olvasatlan értesítések számát
-              if (!deletedNotification.is_read) {
-                setUnreadCount(prev => Math.max(0, prev - 1));
-              }
             }
           }
         )
@@ -347,7 +300,7 @@ export const useNotifications = () => {
         channelRef.current = null;
       }
     };
-  }, [user, toast]); // Hozzáadtuk a toast-ot a függőségi listához
+  }, [user, toast, fetchNotifications]); // Hozzáadtuk a fetchNotifications-t is a függőségi listához
 
   return {
     notifications,
