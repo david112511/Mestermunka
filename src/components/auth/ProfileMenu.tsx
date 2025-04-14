@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useReducer } from 'react';
 
 interface ProfileMenuProps {
   profile: UserProfile | null;
@@ -47,29 +47,48 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
     fetchNotifications
   } = useNotifications();
   
-  const [localNotifications, setLocalNotifications] = useState<Notification[]>([]);
-  const [localUnreadCount, setLocalUnreadCount] = useState<number>(0);
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
   const popoverRef = useRef<HTMLButtonElement>(null);
+  const prevNotificationsLengthRef = useRef(notifications.length);
   
-  // Frissítjük a lokális állapotot, amikor a notifications változik
+  // Kényszerített újrarendereléshez
+  const [, forceUpdate] = useReducer(x => x + 1, 0);
+  
+  // Figyelünk a notifications változására
   useEffect(() => {
-    setLocalNotifications(notifications);
-    setLocalUnreadCount(unreadCount);
+    console.log('ProfileMenu: Notifications változott:', notifications.length, 'db');
     
-    // Ha új értesítés érkezik és a popover nyitva van, vizuálisan jelezzük
-    if (isPopoverOpen && notifications.length > localNotifications.length) {
-      // Új értesítés érkezett, miközben a popover nyitva volt
-      // Itt akár animációt is hozzáadhatnánk
-      const newNotification = notifications.find(
-        n => !localNotifications.some(ln => ln.id === n.id)
-      );
+    // Ha új értesítés érkezett és nem az első betöltés
+    if (notifications.length > prevNotificationsLengthRef.current) {
+      console.log('ProfileMenu: Új értesítés érkezett!');
       
-      if (newNotification) {
-        console.log('Új értesítés érkezett a menü nyitott állapotában:', newNotification);
+      // Kényszerített újrarenderelés
+      forceUpdate();
+      
+      // Ha a popover nincs nyitva, vizuálisan jelezhetjük az új értesítést
+      if (!isPopoverOpen && popoverRef.current) {
+        // Animáció a csengő ikonhoz
+        popoverRef.current.classList.add('animate-bounce');
+        setTimeout(() => {
+          if (popoverRef.current) {
+            popoverRef.current.classList.remove('animate-bounce');
+          }
+        }, 1000);
       }
     }
-  }, [notifications, unreadCount, isPopoverOpen]);
+    
+    // Frissítjük a korábbi értesítések számát
+    prevNotificationsLengthRef.current = notifications.length;
+  }, [notifications, isPopoverOpen]);
+  
+  // Időzített frissítés - 5 másodpercenként ellenőrizzük az értesítéseket
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchNotifications();
+    }, 5000); // 5 másodpercenként
+    
+    return () => clearInterval(intervalId);
+  }, [fetchNotifications]);
   
   // Amikor a popover kinyílik, frissítjük az értesítéseket
   const handlePopoverOpenChange = (open: boolean) => {
@@ -216,9 +235,9 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
             className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-700/30 hover:bg-gray-700/50 transition-colors relative"
           >
             <Bell className="h-5 w-5 text-white" />
-            {localUnreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                {localUnreadCount > 9 ? '9+' : localUnreadCount}
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
@@ -226,7 +245,7 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
         <PopoverContent className="w-80 p-0 bg-white border-0 shadow-lg rounded-lg" align="end">
           <div className="flex items-center justify-between p-4">
             <h4 className="text-sm font-medium">Értesítések</h4>
-            {localUnreadCount > 0 && (
+            {unreadCount > 0 && (
               <button 
                 onClick={() => markAllAsRead()}
                 className="text-xs text-muted-foreground hover:text-gray-900"
@@ -237,7 +256,7 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
           </div>
           <Separator />
           <ScrollArea className="h-[300px]">
-            {localNotifications.length === 0 ? (
+            {notifications.length === 0 ? (
               <div className="flex h-full items-center justify-center p-4 text-center">
                 <p className="text-sm text-muted-foreground">
                   Nincsenek értesítések
@@ -245,7 +264,7 @@ export const ProfileMenu = ({ profile }: ProfileMenuProps) => {
               </div>
             ) : (
               <div className="space-y-1">
-                {localNotifications.map((notification) => (
+                {notifications.map((notification) => (
                   <div
                     key={notification.id}
                     className={`flex items-start gap-3 p-3 hover:bg-muted/50 cursor-pointer ${

@@ -195,6 +195,7 @@ const Navigation = () => {
             <div className="px-3 py-2">
               <ProfileMenu profile={profile} />
             </div>
+            
           ) : (
             <div className="px-3 py-2 space-y-2">
               <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
