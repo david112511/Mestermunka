@@ -54,6 +54,8 @@ import { Switch } from '@/components/ui/switch';
 import AppointmentBooking from '@/components/AppointmentBooking';
 import AppointmentsList from '@/components/AppointmentsList';
 import TrainerAvailabilitySettingsV2 from '@/components/TrainerAvailabilitySettingsV2';
+import TrainerServiceSettings from '@/components/trainer/TrainerServiceSettings';
+import BookingsList from '@/components/booking/BookingsList';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -1166,10 +1168,6 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Profilom</h1>
-          <p className="mt-2 text-lg text-gray-600">Kezeld személyes adataidat és beállításaidat</p>
-        </div>
         
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid grid-cols-4 w-full max-w-3xl mx-auto mb-8 bg-white shadow-sm rounded-lg overflow-hidden">
@@ -1334,6 +1332,55 @@ const Profile = () => {
                     </form>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="trainer">
+            <div className="space-y-8">
+              {/* Edző profil beállítások */}
+              <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-primary/5 border-b pb-4">
+                  <CardTitle className="flex items-center text-primary">
+                    <Dumbbell className="mr-2 h-5 w-5" />
+                    Edző profil beállítások
+                  </CardTitle>
+                  <CardDescription>
+                    Kezeld edzői profilod beállításait és szolgáltatásaidat
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-6">
+                    <div className="border-b pb-6">
+                      <h3 className="text-lg font-medium mb-4">Elérhetőségek kezelése</h3>
+                      <p className="text-gray-500 mb-4">Itt állíthatod be, hogy mely napokon és időpontokban vagy elérhető az ügyfeleid számára.</p>
+                      <TrainerAvailabilitySettingsV2 />
+                    </div>
+                    
+                    <div className="pt-2">
+                      <h3 className="text-lg font-medium mb-4">Szolgáltatások kezelése</h3>
+                      <p className="text-gray-500 mb-4">Itt kezelheted a szolgáltatásaidat, amelyekre ügyfeleid időpontot foglalhatnak.</p>
+                      <TrainerServiceSettings />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="appointments">
+            <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader className="bg-primary/5 border-b pb-4">
+                <CardTitle className="flex items-center text-primary">
+                  <CalendarCheck className="mr-2 h-5 w-5" />
+                  Foglalásaim
+                </CardTitle>
+                <CardDescription>
+                  Tekintsd meg és kezeld az összes foglalásodat
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <BookingsList />
               </CardContent>
             </Card>
           </TabsContent>

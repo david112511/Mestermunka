@@ -11,6 +11,8 @@ import { useNavigate } from 'react-router-dom';
 import { useMessages } from '@/hooks/useMessages';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import BookingWizard from '@/components/booking/BookingWizard';
+import { useState } from 'react';
 
 interface CoachDetailsProps {
   coach: Coach | null;
@@ -22,6 +24,7 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
   const { user } = useAuth();
   const { createOrFindConversation, setCurrentConversation } = useMessages();
   const { toast } = useToast();
+  const [showBookingWizard, setShowBookingWizard] = useState(false);
   
   if (!coach) return null;
 
@@ -180,14 +183,11 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
               </div>
             </div>
 
-            <div className="border-t pt-4 flex justify-between items-center">
+            <div className="border-t pt-4">
               <div>
                 <p className="text-gray-600">Óradíj</p>
                 <p className="text-3xl font-bold text-gray-900">{coach.price} Ft</p>
               </div>
-              <button className="px-8 py-4 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors">
-                Időpont foglalás
-              </button>
             </div>
           </div>
         </div>
@@ -201,14 +201,33 @@ const CoachDetails = ({ coach, onClose }: CoachDetailsProps) => {
             Üzenet küldése
           </Button>
           <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={() => navigate('/calendar')}
+            variant="default" 
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90"
+            onClick={() => setShowBookingWizard(true)}
           >
             <Calendar className="h-4 w-4" />
             Időpontfoglalás
           </Button>
         </div>
+        
+        {showBookingWizard && (
+          <Dialog open={showBookingWizard} onOpenChange={setShowBookingWizard}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
+              <BookingWizard 
+                trainerId={String(coach.id)} 
+                onClose={() => setShowBookingWizard(false)}
+                onSuccess={(bookingId) => {
+                  setShowBookingWizard(false);
+                  toast({
+                    title: "Sikeres foglalás",
+                    description: `A foglalás azonosítója: ${bookingId}`,
+                    variant: "default",
+                  });
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </DialogContent>
     </Dialog>
   );

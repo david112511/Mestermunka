@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, addHours } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO, addHours, startOfWeek, endOfWeek, addDays, subDays } from 'date-fns';
 import { hu } from 'date-fns/locale';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Clock, Users, MapPin, Dumbbell, X, Edit, Trash2 } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
@@ -667,6 +667,26 @@ const resetNewEvent = () => {
     setCurrentDate(addMonths(currentDate, 1));
   };
 
+  // Előző hét
+  const handlePreviousWeek = () => {
+    setCurrentDate(subDays(currentDate, 7));
+  };
+
+  // Következő hét
+  const handleNextWeek = () => {
+    setCurrentDate(addDays(currentDate, 7));
+  };
+
+  // Előző nap
+  const handlePreviousDay = () => {
+    setCurrentDate(subDays(currentDate, 1));
+  };
+
+  // Következő nap
+  const handleNextDay = () => {
+    setCurrentDate(addDays(currentDate, 1));
+  };
+
   // Nap eseményeinek lekérése
   const getEventsForDay = (day: Date) => {
     return events.filter(event => {
@@ -742,13 +762,35 @@ const resetNewEvent = () => {
                 </TabsList>
                 
                 <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="icon" onClick={handlePreviousMonth}>
+                  {/* Navigációs gombok az aktív nézet alapján */}
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={
+                      activeView === 'month' ? handlePreviousMonth : 
+                      activeView === 'week' ? handlePreviousWeek : 
+                      handlePreviousDay
+                    }
+                  >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <h2 className="text-lg font-medium text-gray-900 min-w-[150px] text-center">
-                    {format(currentDate, 'MMMM yyyy', { locale: hu })}
+                  
+                  {/* Dátum megjelenítése az aktív nézet alapján */}
+                  <h2 className="text-lg font-medium text-gray-900 min-w-[200px] text-center">
+                    {activeView === 'month' && format(currentDate, 'MMMM yyyy', { locale: hu })}
+                    {activeView === 'week' && `${format(startOfWeek(currentDate, { locale: hu, weekStartsOn: 1 }), 'MMM d', { locale: hu })} - ${format(endOfWeek(currentDate, { locale: hu, weekStartsOn: 1 }), 'MMM d, yyyy', { locale: hu })}`}
+                    {activeView === 'day' && format(currentDate, 'yyyy. MMMM d., EEEE', { locale: hu })}
                   </h2>
-                  <Button variant="outline" size="icon" onClick={handleNextMonth}>
+                  
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={
+                      activeView === 'month' ? handleNextMonth : 
+                      activeView === 'week' ? handleNextWeek : 
+                      handleNextDay
+                    }
+                  >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
