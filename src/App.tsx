@@ -37,6 +37,8 @@ function App() {
                 <Route path="/messages" element={<Messages />} />
                 <Route path="/messages/:userId" element={<Messages />} />
                 <Route path="*" element={<NotFound />} />
+                <Route path="/" element={<Community />} />
+               
               </Route>
             </Routes>
           </BrowserRouter>

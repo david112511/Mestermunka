@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search, Trash2 } from 'lucide-react'; // 添加 Trash2 图标
+import { MessageCircle, Heart, Share2, BookmarkPlus, UserPlus, Search, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 
@@ -20,11 +20,12 @@ interface Post {
     id: string;
     content: string;
     created_at: string;
-    author: { first_name: string; last_name: string; id: string }; // 添加 author.id
+    author: { first_name: string; last_name: string; id: string };
   }>;
   likes: number;
   likedBy: string[];
   isFollowed: boolean;
+  isSaved: boolean; // 新增保存状态
 }
 
 const Community = () => {
@@ -39,6 +40,7 @@ const Community = () => {
   const [commentLoading, setCommentLoading] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState<string | null>(null); // 新增保存加载状态
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newPostContent, setNewPostContent] = useState<string>('');
   const [newPostMedia, setNewPostMedia] = useState<File | null>(null);
@@ -90,6 +92,13 @@ const Community = () => {
 
         if (likesError) throw likesError;
 
+        const { data: savedPosts, error: savedError } = await supabase
+          .from('saved_posts')
+          .select('post_id')
+          .eq('user_id', currentUserId || '');
+
+        if (savedError && currentUserId) throw savedError;
+
         const followedIds = currentUserId
           ? (await supabase.from('follows').select('followed_id').eq('follower_id', currentUserId)).data?.map(f => f.followed_id) || []
           : [];
@@ -99,10 +108,11 @@ const Community = () => {
           likes: likes.filter((like) => like.post_id === post.id).length,
           likedBy: likes.filter((like) => like.post_id === post.id).map((like) => like.user_id),
           isFollowed: followedIds.includes(post.author_id),
+          isSaved: currentUserId ? savedPosts?.some((sp) => sp.post_id === post.id) || false : false,
           comments: post.comments.map((comment) => ({
             ...comment,
             author: {
-              id: comment.author.id, // 添加 author.id
+              id: comment.author.id,
               first_name: comment.author.first_name,
               last_name: comment.author.last_name,
             },
@@ -215,9 +225,48 @@ const Community = () => {
     };
   }, []);
 
+  // 实时监听保存帖子变化
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const savedPostsSubscription = supabase
+      .channel('saved-posts-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'saved_posts', filter: `user_id=eq.${currentUserId}` },
+        (payload) => {
+          console.log('Saved posts change detected:', payload);
+          const { eventType, new: newSave, old: oldSave } = payload;
+
+          setPosts((prevPosts) =>
+            prevPosts.map((post) => {
+              if (eventType === 'INSERT' && newSave.post_id === post.id) {
+                return { ...post, isSaved: true };
+              } else if (eventType === 'DELETE' && oldSave.post_id === post.id) {
+                return { ...post, isSaved: false };
+              }
+              return post;
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(savedPostsSubscription);
+    };
+  }, [currentUserId]);
+
   const filteredPosts = activeTab === 'all'
-    ? posts
-    : posts.filter((post) => post.author.user_type === 'trainer');
+    ? posts.filter((post) =>
+        post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${post.author.first_name} ${post.author.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : posts.filter((post) =>
+        post.author.user_type === 'trainer' &&
+        (post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         `${post.author.first_name} ${post.author.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
 
   const handleLike = async (id: string) => {
     if (!currentUserId) {
@@ -263,6 +312,7 @@ const Community = () => {
     try {
       await supabase.from('comments').delete().eq('post_id', id);
       await supabase.from('likes').delete().eq('post_id', id);
+      await supabase.from('saved_posts').delete().eq('post_id', id);
       const { error } = await supabase
         .from('posts')
         .delete()
@@ -324,18 +374,42 @@ const Community = () => {
         .eq('author_id', currentUserId);
 
       if (error) throw error;
-
-      // 本地更新状态（实时监听会自动处理，但这里手动更新以确保即时反馈）
-      setPosts((prevPosts) =>
-        prevPosts.map((post) =>
-          post.id === postId
-            ? { ...post, comments: post.comments.filter((c) => c.id !== commentId) }
-            : post
-        )
-      );
     } catch (error) {
       console.error('Error deleting comment:', (error as Error).message);
       setCommentError('Hiba történt a hozzászólás törlése során. Kérjük, próbáld újra!');
+    }
+  };
+
+  const handleSavePost = async (postId: string, isSaved: boolean) => {
+    if (!currentUserId) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    setSaveLoading(postId);
+    try {
+      if (isSaved) {
+        const { error } = await supabase
+          .from('saved_posts')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', currentUserId);
+
+        if (error) throw error;
+        setPosts(posts.map((p) => (p.id === postId ? { ...p, isSaved: false } : p)));
+      } else {
+        const { error } = await supabase
+          .from('saved_posts')
+          .insert({ post_id: postId, user_id: currentUserId });
+
+        if (error) throw error;
+        setPosts(posts.map((p) => (p.id === postId ? { ...p, isSaved: true } : p)));
+      }
+    } catch (error) {
+      console.error('Error saving post:', (error as Error).message);
+      alert('Hiba történt a bejegyzés mentése során!');
+    } finally {
+      setSaveLoading(null);
     }
   };
 
@@ -391,17 +465,12 @@ const Community = () => {
 
       console.log('New post inserted:', newPost);
 
-      const { data: likes } = await supabase.from('likes').select('post_id, user_id');
-      const { data: follows } = await supabase
-        .from('follows')
-        .select('follower_id, followed_id')
-        .eq('follower_id', currentUserId);
-
       const newPostWithLikesAndFollows = {
         ...newPost,
         likes: 0,
         likedBy: [],
-        isFollowed: follows.some((follow: any) => follow.followed_id === newPost.author_id),
+        isFollowed: false,
+        isSaved: false,
         comments: [],
       };
 
@@ -475,12 +544,12 @@ const Community = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-900 text-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24">
         {currentUserId && (
           <div className="mt-8">
             <button
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-colors"
               onClick={() => setIsModalOpen(true)}
             >
               Új Bejegyzés Létrehozása
@@ -494,20 +563,20 @@ const Community = () => {
             <input
               type="text"
               placeholder="Keresés a bejegyzések között..."
-              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-700 bg-gray-800 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex gap-2">
             <button
-              className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'all' ? 'bg-primary text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'all' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700'}`}
               onClick={() => setActiveTab('all')}
             >
               Összes Poszt
             </button>
             <button
-              className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'trainer' ? 'bg-primary text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'trainer' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700'}`}
               onClick={() => setActiveTab('trainer')}
             >
               Csak Edzők
@@ -518,7 +587,7 @@ const Community = () => {
         <div className="mt-8 space-y-6">
           {filteredPosts.length > 0 ? (
             filteredPosts.map((post) => (
-              <div key={post.id} className="bg-white rounded-xl shadow-sm p-6">
+              <div key={post.id} className="bg-gray-800 rounded-xl shadow-lg p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
                     <Link to={`/personal-profile/${post.author_id}`} className="block">
@@ -530,16 +599,16 @@ const Community = () => {
                     </Link>
                     <div className="ml-4">
                       <div className="flex items-center">
-                        <h3 className="font-semibold text-gray-900">
+                        <h3 className="font-semibold text-white">
                           {post.author.first_name} {post.author.last_name}
                         </h3>
                         {post.author.user_type === 'trainer' && (
-                          <svg className="ml-1 h-4 w-4 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                          <svg className="ml-1 h-4 w-4 text-yellow-500" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
                           </svg>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-400">
                         {post.author.user_type === 'trainer' ? 'Fitness Edző' : 'Közösségi Tag'} • {new Date(post.create_at).toLocaleString()}
                       </p>
                     </div>
@@ -547,19 +616,23 @@ const Community = () => {
                   <div className="flex items-center space-x-2">
                     {post.author_id === currentUserId && (
                       <button
-                        className="text-red-500 hover:text-red-600 transition-colors"
+                        className="text-red-500 hover:text-red-400 transition-colors"
                         onClick={() => handleDeletePost(post.id)}
                         disabled={deleteLoading === post.id}
                       >
-                        {deleteLoading === post.id ? 'Törlés...' : 'Törlés'}
+                        <Trash2 className="h-5 w-5" />
                       </button>
                     )}
-                    <button className="text-gray-400 hover:text-gray-500">
+                    <button
+                      className={`text-gray-400 hover:text-yellow-500 transition-colors ${post.isSaved ? 'text-yellow-500' : ''}`}
+                      onClick={() => handleSavePost(post.id, post.isSaved)}
+                      disabled={saveLoading === post.id}
+                    >
                       <BookmarkPlus className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
-                <p className="mt-4 text-gray-700">{post.content}</p>
+                <p className="mt-4 text-gray-200">{post.content}</p>
                 {post.media_url ? (
                   post.media_url.includes('.mp4') || post.media_url.includes('.mov') ? (
                     <video
@@ -576,24 +649,24 @@ const Community = () => {
                   )
                 ) : null}
 
-                <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-100">
+                <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-700">
                   <div className="flex items-center space-x-4">
                     <button
-                      className="flex items-center text-gray-600 hover:text-primary transition-colors"
+                      className="flex items-center text-gray-400 hover:text-yellow-500 transition-colors"
                       onClick={() => handleLike(post.id)}
                     >
-                      <Heart className={`h-5 w-5 mr-1 ${post.likedBy.includes(currentUserId || '') ? 'text-red-500' : ''}`} />
+                      <Heart className={`h-5 w-5 mr-1 ${post.likedBy.includes(currentUserId || '') ? 'text-red-500 fill-red-500' : ''}`} />
                       <span>{post.likes}</span>
                     </button>
                     <button
-                      className="flex items-center text-gray-600 hover:text-primary transition-colors"
+                      className="flex items-center text-gray-400 hover:text-yellow-500 transition-colors"
                       onClick={() => toggleCommentSection(post.id)}
                     >
                       <MessageCircle className="h-5 w-5 mr-1" />
                       <span>{post.comments.length}</span>
                     </button>
                     <button
-                      className="flex items-center text-gray-600 hover:text-primary transition-colors"
+                      className="flex items-center text-gray-400 hover:text-yellow-500 transition-colors"
                       onClick={() => handleShare(post.id)}
                     >
                       <Share2 className="h-5 w-5" />
@@ -603,8 +676,8 @@ const Community = () => {
                     <button
                       className={`inline-flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
                         post.isFollowed
-                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          : 'bg-primary/10 text-primary hover:bg-primary/20'
+                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          : 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'
                       }`}
                       onClick={() => handleFollow(post.id, post.author_id, post.isFollowed)}
                       disabled={followLoading === post.id}
@@ -620,12 +693,12 @@ const Community = () => {
                 </div>
 
                 {shareMessage && shareMessage.postId === post.id && (
-                  <p className="text-green-600 text-sm mt-2">{shareMessage.message}</p>
+                  <p className="text-yellow-500 text-sm mt-2">{shareMessage.message}</p>
                 )}
 
                 {openCommentSections[post.id] && (
-                  <div className="mt-4 bg-white rounded-xl shadow-sm p-4">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-3">Hozzászólások</h4>
+                  <div className="mt-4 bg-gray-800 rounded-xl shadow-sm p-4">
+                    <h4 className="text-lg font-semibold text-white mb-3">Hozzászólások</h4>
                     <div className="max-h-60 overflow-y-auto space-y-3">
                       {post.comments && post.comments.length > 0 ? (
                         post.comments
@@ -633,11 +706,11 @@ const Community = () => {
                           .map((comment) => (
                             <div
                               key={comment.id}
-                              className="border-b border-gray-200 pb-3 last:border-b-0 flex justify-between items-start"
+                              className="border-b border-gray-700 pb-3 last:border-b-0 flex justify-between items-start"
                             >
                               <div className="flex-1">
                                 <div className="flex items-center">
-                                  <span className="font-semibold text-gray-800">
+                                  <span className="font-semibold text-white">
                                     {comment.author?.first_name || 'Névtelen'} {comment.author?.last_name || ''}:
                                   </span>
                                   {comment.created_at && (
@@ -646,11 +719,11 @@ const Community = () => {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-gray-700 mt-1">{comment.content}</p>
+                                <p className="text-gray-200 mt-1">{comment.content}</p>
                               </div>
                               {comment.author.id === currentUserId && (
                                 <button
-                                  className="text-red-500 hover:text-red-600 transition-colors ml-2"
+                                  className="text-red-500 hover:text-red-400 transition-colors ml-2"
                                   onClick={() => handleDeleteComment(post.id, comment.id)}
                                 >
                                   <Trash2 className="h-5 w-5" />
@@ -659,7 +732,7 @@ const Community = () => {
                             </div>
                           ))
                       ) : (
-                        <p className="text-gray-500 text-center py-4">Még nincs hozzászólás, legyél az első!</p>
+                        <p className="text-gray-400 text-center py-4">Még nincs hozzászólás, legyél az első!</p>
                       )}
                     </div>
                     {currentUserId && (
@@ -667,7 +740,7 @@ const Community = () => {
                         <div className="flex gap-3">
                           <input
                             type="text"
-                            className="flex-1 p-2 border border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="flex-1 p-2 border border-gray-700 rounded-lg shadow-sm bg-gray-900 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
                             placeholder="Hagyj egy hozzászólást!"
                             value={commentInputs[post.id] || ''}
                             onChange={(e) => setCommentInputs({ ...commentInputs, [post.id]: e.target.value })}
@@ -680,7 +753,7 @@ const Community = () => {
                             disabled={commentLoading === post.id}
                           />
                           <button
-                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+                            className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-colors disabled:bg-gray-700"
                             onClick={() => handleComment(post.id)}
                             disabled={commentLoading === post.id}
                           >
@@ -701,16 +774,16 @@ const Community = () => {
               </div>
             ))
           ) : (
-            <p className="text-center text-gray-500">Nincs megjeleníthető bejegyzés。</p>
+            <p className="text-center text-gray-400">Nincs megjeleníthető bejegyzés。</p>
           )}
         </div>
 
         {isModalOpen && currentUserId && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Új Bejegyzés</h2>
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-lg font-semibold text-white mb-4">Új Bejegyzés</h2>
               <textarea
-                className="w-full p-2 border rounded mb-4"
+                className="w-full p-2 border border-gray-700 rounded mb-4 bg-gray-900 text-white"
                 placeholder="Oszd meg gondolataidat..."
                 value={newPostContent}
                 onChange={(e) => setNewPostContent(e.target.value)}
@@ -719,7 +792,7 @@ const Community = () => {
               <input
                 type="file"
                 accept="image/*,video/*"
-                className="mb-4"
+                className="mb-4 text-gray-300"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) setNewPostMedia(file);
@@ -727,7 +800,7 @@ const Community = () => {
               />
               <div className="flex justify-end gap-2">
                 <button
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+                  className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
                   onClick={() => {
                     setNewPostContent('');
                     setNewPostMedia(null);
@@ -737,7 +810,7 @@ const Community = () => {
                   Mégse
                 </button>
                 <button
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                  className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 rounded hover:from-yellow-600 hover:to-yellow-700 transition-colors"
                   onClick={handleAddPost}
                 >
                   Közzététel
@@ -748,13 +821,13 @@ const Community = () => {
         )}
 
         {isLoginModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Bejelentkezés szükséges</h2>
-              <p className="text-gray-700 mb-4">Kérjük, jelentkezz be a funkció használatához!</p>
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm">
+              <h2 className="text-lg font-semibold text-white mb-4">Bejelentkezés szükséges</h2>
+              <p className="text-gray-300 mb-4">Kérjük, jelentkezz be a funkció használatához!</p>
               <div className="flex justify-end">
                 <button
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                  className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 rounded hover:from-yellow-600 hover:to-yellow-700 transition-colors"
                   onClick={() => setIsLoginModalOpen(false)}
                 >
                   Rendben
