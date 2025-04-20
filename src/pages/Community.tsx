@@ -127,28 +127,42 @@ const Community = () => {
     fetchPosts();
   }, [currentUserId]);
 
-  // 点赞订阅
+  // 点赞订阅 - Módosítva, hogy ne okozzon duplikációt az optimista UI frissítéssel
   useEffect(() => {
     const likesSubscription = supabase
       .channel('likes-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, (payload) => {
         const { eventType, new: newLike, old: oldLike } = payload;
-        setPosts((prevPosts) =>
-          prevPosts.map((post) => {
-            if (eventType === 'INSERT' && newLike.post_id === post.id) {
-              return { ...post, likes: post.likes + 1, likedBy: [...post.likedBy, newLike.user_id] };
-            } else if (eventType === 'DELETE' && oldLike.post_id === post.id) {
-              return { ...post, likes: post.likes - 1, likedBy: post.likedBy.filter((uid) => uid !== oldLike.user_id) };
-            }
-            return post;
-          })
-        );
+        
+        // Csak akkor frissítjük a UI-t, ha a változás nem a jelenlegi felhasználótól származik
+        // Így elkerüljük a duplikációt az optimista UI frissítéssel
+        if ((eventType === 'INSERT' && newLike.user_id !== currentUserId) ||
+            (eventType === 'DELETE' && oldLike.user_id !== currentUserId)) {
+          setPosts((prevPosts) =>
+            prevPosts.map((post) => {
+              if (eventType === 'INSERT' && newLike.post_id === post.id) {
+                return { 
+                  ...post, 
+                  likes: post.likes + 1, 
+                  likedBy: [...post.likedBy, newLike.user_id] 
+                };
+              } else if (eventType === 'DELETE' && oldLike.post_id === post.id) {
+                return { 
+                  ...post, 
+                  likes: post.likes - 1, 
+                  likedBy: post.likedBy.filter((uid) => uid !== oldLike.user_id) 
+                };
+              }
+              return post;
+            })
+          );
+        }
       })
       .subscribe();
     return () => {
       supabase.removeChannel(likesSubscription);
     };
-  }, []);
+  }, [currentUserId]);
 
   // 评论订阅
   useEffect(() => {
@@ -238,19 +252,39 @@ const Community = () => {
       setIsLoginModalOpen(true);
       return;
     }
+
+    // Keressük meg a posztot
+    const post = posts.find(p => p.id === id);
+    if (!post) return;
+
+    // Ellenőrizzük, hogy a felhasználó már kedvelte-e a posztot
+    const hasLiked = post.likedBy.includes(currentUserId);
+
+    // Optimista UI frissítés - azonnal frissítjük a felhasználói felületet
+    setPosts(prevPosts =>
+      prevPosts.map(p => {
+        if (p.id === id) {
+          return {
+            ...p,
+            likes: hasLiked ? p.likes - 1 : p.likes + 1,
+            likedBy: hasLiked 
+              ? p.likedBy.filter(uid => uid !== currentUserId)
+              : [...p.likedBy, currentUserId]
+          };
+        }
+        return p;
+      })
+    );
+
     try {
-      const { data: existingLike, error: selectError } = await supabase
-        .from('likes')
-        .select('*')
-        .eq('post_id', id)
-        .eq('user_id', currentUserId);
-      if (selectError) throw selectError;
-      if (existingLike.length === 0) {
+      if (!hasLiked) {
+        // Ha még nem kedvelte, akkor hozzáadjuk a like-ot
         const { error: insertError } = await supabase
           .from('likes')
           .insert({ post_id: id, user_id: currentUserId });
         if (insertError) throw insertError;
       } else {
+        // Ha már kedvelte, akkor töröljük a like-ot
         const { error: deleteError } = await supabase
           .from('likes')
           .delete()
@@ -260,6 +294,22 @@ const Community = () => {
       }
     } catch (error) {
       console.error('Error liking post:', (error as Error).message);
+      
+      // Hiba esetén visszaállítjuk az eredeti állapotot
+      setPosts(prevPosts =>
+        prevPosts.map(p => {
+          if (p.id === id) {
+            return {
+              ...p,
+              likes: hasLiked ? p.likes + 1 : p.likes - 1,
+              likedBy: hasLiked 
+                ? [...p.likedBy, currentUserId]
+                : p.likedBy.filter(uid => uid !== currentUserId)
+            };
+          }
+          return p;
+        })
+      );
     }
   };
 

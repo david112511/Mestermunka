@@ -55,6 +55,7 @@ import AppointmentBooking from '@/components/AppointmentBooking';
 import AppointmentsList from '@/components/AppointmentsList';
 import TrainerAvailabilitySettingsV2 from '@/components/TrainerAvailabilitySettingsV2';
 import TrainerServiceSettings from '@/components/trainer/TrainerServiceSettings';
+import BookingConfirmationSettings from '@/components/trainer/BookingConfirmationSettings';
 import BookingsList from '@/components/booking/BookingsList';
 
 const Profile = () => {
@@ -1170,15 +1171,17 @@ const Profile = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12">
         
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid grid-cols-4 w-full max-w-3xl mx-auto mb-8 bg-white shadow-sm rounded-lg overflow-hidden">
+          <TabsList className={`grid ${isTrainer ? 'grid-cols-4' : 'grid-cols-3'} w-full max-w-3xl mx-auto mb-8 bg-white shadow-sm rounded-lg overflow-hidden`}>
             <TabsTrigger value="personal" className="data-[state=active]:bg-primary data-[state=active]:text-white">
               <User className="h-4 w-4 mr-2" />
               Profil
             </TabsTrigger>
-            <TabsTrigger value="trainer" className="data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Dumbbell className="h-4 w-4 mr-2" />
-              Edző profil
-            </TabsTrigger>
+            {isTrainer && (
+              <TabsTrigger value="trainer" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Dumbbell className="h-4 w-4 mr-2" />
+                Edző profil
+              </TabsTrigger>
+            )}
             <TabsTrigger value="appointments" className="data-[state=active]:bg-primary data-[state=active]:text-white">
               <CalendarCheck className="h-4 w-4 mr-2" />
               Foglalásaim
@@ -1337,53 +1340,56 @@ const Profile = () => {
           </TabsContent>
           
           <TabsContent value="trainer">
-            <div className="space-y-8">
-              {/* Edző profil beállítások */}
+            {isTrainer ? (
+              <div className="space-y-8">
+                {/* Edző profil beállítások */}
+                <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="bg-primary/5 border-b pb-4">
+                    <CardTitle className="flex items-center text-primary">
+                      <Dumbbell className="mr-2 h-5 w-5" />
+                      Edző profil beállítások
+                    </CardTitle>
+                    <CardDescription>
+                      Kezeld edzői profilod beállításait és szolgáltatásaidat
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-6">
+                      <div className="border-b pb-6">
+                        <h3 className="text-lg font-medium mb-4">Elérhetőségek kezelése</h3>
+                        <p className="text-gray-500 mb-4">Itt állíthatod be, hogy mely napokon és időpontokban vagy elérhető az ügyfeleid számára.</p>
+                        <TrainerAvailabilitySettingsV2 />
+                      </div>
+                      
+                      <div className="border-b pb-6">
+                        <h3 className="text-lg font-medium mb-4">Foglalások megerősítési módja</h3>
+                        <p className="text-gray-500 mb-4">Itt állíthatod be, hogy a foglalásokat automatikusan megerősítse-e a rendszer, vagy manuálisan szeretnéd jóváhagyni azokat.</p>
+                        <BookingConfirmationSettings />
+                      </div>
+                      
+                      <div className="pt-2">
+                        <h3 className="text-lg font-medium mb-4">Szolgáltatások kezelése</h3>
+                        <p className="text-gray-500 mb-4">Itt kezelheted a szolgáltatásaidat, amelyekre ügyfeleid időpontot foglalhatnak.</p>
+                        <TrainerServiceSettings />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
               <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
-                <CardHeader className="bg-primary/5 border-b pb-4">
-                  <CardTitle className="flex items-center text-primary">
-                    <Dumbbell className="mr-2 h-5 w-5" />
-                    Edző profil beállítások
-                  </CardTitle>
-                  <CardDescription>
-                    Kezeld edzői profilod beállításait és szolgáltatásaidat
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-6">
-                    <div className="border-b pb-6">
-                      <h3 className="text-lg font-medium mb-4">Elérhetőségek kezelése</h3>
-                      <p className="text-gray-500 mb-4">Itt állíthatod be, hogy mely napokon és időpontokban vagy elérhető az ügyfeleid számára.</p>
-                      <TrainerAvailabilitySettingsV2 />
-                    </div>
-                    
-                    <div className="pt-2">
-                      <h3 className="text-lg font-medium mb-4">Szolgáltatások kezelése</h3>
-                      <p className="text-gray-500 mb-4">Itt kezelheted a szolgáltatásaidat, amelyekre ügyfeleid időpontot foglalhatnak.</p>
-                      <TrainerServiceSettings />
-                    </div>
+                <CardContent className="p-6">
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Dumbbell className="h-12 w-12 text-gray-300 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-500 mb-2">Edzői profil nem elérhető</h3>
+                    <p className="text-gray-400 text-center">Nem rendelkezel edzői jogosultsággal. Ha szeretnél edző lenni, kérjük, vedd fel a kapcsolatot az adminisztrátorral.</p>
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            )}
           </TabsContent>
           
-          <TabsContent value="appointments">
-            <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
-              <CardHeader className="bg-primary/5 border-b pb-4">
-                <CardTitle className="flex items-center text-primary">
-                  <CalendarCheck className="mr-2 h-5 w-5" />
-                  Foglalásaim
-                </CardTitle>
-                <CardDescription>
-                  Tekintsd meg és kezeld az összes foglalásodat
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <BookingsList />
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* A duplált foglalások doboz eltávolítva */}
           
           <TabsContent value="account">
             <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
@@ -1870,43 +1876,26 @@ const Profile = () => {
           </TabsContent>
           
           <TabsContent value="appointments">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Bal oldal - Foglalásaim */}
-              <Card className="lg:col-span-2 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+            <div className="grid grid-cols-1 gap-8">
+              <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
                 <CardHeader className="bg-primary/5 border-b pb-4">
                   <CardTitle className="flex items-center text-primary">
                     <CalendarCheck className="mr-2 h-5 w-5" />
                     Foglalásaim
                   </CardTitle>
                   <CardDescription>
-                    Kezeld időpontfoglalásaidat
+                    Tekintsd meg és kezeld az összes foglalásodat
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <AppointmentsList />
+                  <BookingsList />
                 </CardContent>
               </Card>
               
-              {/* Jobb oldal - Elérhetőség beállítása (csak edzőknek) */}
-              {isTrainer && (
-                <Card className="lg:col-span-1 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
-                  <CardHeader className="bg-primary/5 border-b pb-4">
-                    <CardTitle className="flex items-center text-primary">
-                      <Clock className="mr-2 h-5 w-5" />
-                      Elérhetőség beállítása
-                    </CardTitle>
-                    <CardDescription>
-                      Állítsd be, mikor vagy elérhető
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-6">
-                    <TrainerAvailabilitySettingsV2 />
-                  </CardContent>
-                </Card>
-              )}
+              {/* Az elérhetőségi idők doboz eltávolítva */}
               
               {!isTrainer && (
-                <Card className="lg:col-span-1 bg-white border-none shadow-md hover:shadow-lg transition-shadow">
+                <Card className="bg-white border-none shadow-md hover:shadow-lg transition-shadow">
                   <CardHeader className="bg-primary/5 border-b pb-4">
                     <CardTitle className="flex items-center text-primary">
                       <Dumbbell className="mr-2 h-5 w-5" />

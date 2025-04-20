@@ -132,43 +132,97 @@ const PersonalProfile = () => {
         const followersCount = followersData?.length || 0;
         setProfile({ ...profileData, followersCount });
 
+        // Lekérdezzük a követőket közvetlenül a profiles táblából
         const { data: followersProfiles, error: followersProfilesError } = await supabase
-          .from('follows')
-          .select(`
-            follower_id,
-            profiles:follower_id(id, first_name, last_name, avatar_url)
-          `)
+          .from('followers_with_profiles')
+          .select('follower_id, follower_first_name, follower_last_name, follower_avatar_url')
           .eq('followed_id', userId);
-        if (followersProfilesError) throw followersProfilesError;
-        setFollowers(
-          followersProfiles
-            ?.map((f: any) => ({
-              id: f.profiles?.id,
-              first_name: f.profiles?.first_name,
-              last_name: f.profiles?.last_name,
-              avatar_url: f.profiles?.avatar_url,
-            }))
-            .filter((f): f is FollowUser => !!f.id) || []
-        );
+        
+        if (followersProfilesError) {
+          // Ha a nézet még nem létezik, próbáljuk meg közvetlenül a follows táblából
+          console.log('Hiba a követők lekérdezésekor a nézetből:', followersProfilesError.message);
+          
+          // Alternatív lekérdezés közvetlenül a follows és profiles táblákból
+          const { data: altFollowersData, error: altError } = await supabase
+            .from('follows')
+            .select('follower_id')
+            .eq('followed_id', userId);
+            
+          if (altError) throw altError;
+          
+          // Lekérdezzük a profilokat a follower_id alapján
+          if (altFollowersData && altFollowersData.length > 0) {
+            const followerIds = altFollowersData.map(f => f.follower_id);
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name, avatar_url')
+              .in('id', followerIds);
+              
+            if (profilesError) throw profilesError;
+            
+            setFollowers(profilesData || []);
+          } else {
+            setFollowers([]);
+          }
+        } else {
+          // Map the followers data from the view
+          setFollowers(
+            (followersProfiles || [])
+              .map((f: any) => ({
+                id: f.follower_id,
+                first_name: f.follower_first_name,
+                last_name: f.follower_last_name,
+                avatar_url: f.follower_avatar_url,
+              }))
+              .filter((f): f is FollowUser => !!f.id) || []
+          );
+        }
 
+        // Lekérdezzük a követetteket közvetlenül a profiles táblából
         const { data: followingProfiles, error: followingProfilesError } = await supabase
-          .from('follows')
-          .select(`
-            followed_id,
-            profiles:followed_id(id, first_name, last_name, avatar_url)
-          `)
+          .from('followers_with_profiles')
+          .select('followed_id, followed_first_name, followed_last_name, followed_avatar_url')
           .eq('follower_id', userId);
-        if (followingProfilesError) throw followingProfilesError;
-        setFollowing(
-          followingProfiles
-            ?.map((f: any) => ({
-              id: f.profiles?.id,
-              first_name: f.profiles?.first_name,
-              last_name: f.profiles?.last_name,
-              avatar_url: f.profiles?.avatar_url,
-            }))
-            .filter((f): f is FollowUser => !!f.id) || []
-        );
+        
+        if (followingProfilesError) {
+          // Ha a nézet még nem létezik, próbáljuk meg közvetlenül a follows táblából
+          console.log('Hiba a követettek lekérdezésekor a nézetből:', followingProfilesError.message);
+          
+          // Alternatív lekérdezés közvetlenül a follows és profiles táblákból
+          const { data: altFollowingData, error: altError } = await supabase
+            .from('follows')
+            .select('followed_id')
+            .eq('follower_id', userId);
+            
+          if (altError) throw altError;
+          
+          // Lekérdezzük a profilokat a followed_id alapján
+          if (altFollowingData && altFollowingData.length > 0) {
+            const followedIds = altFollowingData.map(f => f.followed_id);
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, first_name, last_name, avatar_url')
+              .in('id', followedIds);
+              
+            if (profilesError) throw profilesError;
+            
+            setFollowing(profilesData || []);
+          } else {
+            setFollowing([]);
+          }
+        } else {
+          // Map the following data from the view
+          setFollowing(
+            (followingProfiles || [])
+              .map((f: any) => ({
+                id: f.followed_id,
+                first_name: f.followed_first_name,
+                last_name: f.followed_last_name,
+                avatar_url: f.followed_avatar_url,
+              }))
+              .filter((f): f is FollowUser => !!f.id) || []
+          );
+        }
 
         const { data: postsData, error: postsError } = await supabase
           .from('posts')
@@ -202,20 +256,46 @@ const PersonalProfile = () => {
             .order('created_at', { ascending: false });
           if (savedPostsError) throw savedPostsError;
 
-          savedPostsWithLikes = (savedPostsData || []).map((sp) => ({
-            ...sp.posts,
-            likes: likesData?.filter((like) => like.post_id === sp.posts.id).length || 0,
-            likedBy: likesData?.filter((like) => like.post_id === sp.posts.id).map((like) => like.user_id) || [],
-            comments: (sp.posts.comments || []).map((comment: any) => ({
-              id: comment.id,
-              content: comment.content,
-              created_at: comment.created_at,
-              author: {
-                first_name: comment.author?.first_name || 'Ismeretlen',
-                last_name: comment.author?.last_name || '',
-              },
-            })),
-          }));
+          // Use a direct approach with a simple array
+          const savedPostsList: Post[] = [];
+          
+          if (savedPostsData && savedPostsData.length > 0) {
+            // Process each saved post
+            savedPostsData.forEach((savedPost: any) => {
+              if (!savedPost.posts) return;
+              
+              // Create a post object with explicit properties
+              savedPostsList.push({
+                id: savedPost.posts.id || '',
+                author_id: savedPost.posts.author_id || '',
+                content: savedPost.posts.content || '',
+                create_at: savedPost.posts.create_at || '',
+                media_url: savedPost.posts.media_url || null,
+                likes: likesData?.filter((like) => like.post_id === savedPost.post_id).length || 0,
+                likedBy: likesData?.filter((like) => like.post_id === savedPost.post_id).map((like) => like.user_id) || [],
+                author: {
+                  id: savedPost.posts.author?.id || '',
+                  first_name: savedPost.posts.author?.first_name || '',
+                  last_name: savedPost.posts.author?.last_name || '',
+                  avatar_url: savedPost.posts.author?.avatar_url || null
+                },
+                comments: Array.isArray(savedPost.posts.comments) 
+                  ? savedPost.posts.comments.map((comment: any) => ({
+                      id: comment.id || '',
+                      content: comment.content || '',
+                      created_at: comment.created_at || '',
+                      author: {
+                        first_name: comment.author?.first_name || 'Ismeretlen',
+                        last_name: comment.author?.last_name || ''
+                      }
+                    }))
+                  : []
+              });
+            });
+          }
+          
+          // Assign the properly typed array
+          savedPostsWithLikes = savedPostsList;
         }
 
         const postsWithLikes = (postsData || []).map((post) => ({
@@ -234,8 +314,10 @@ const PersonalProfile = () => {
         }));
 
         const totalLikesCount = postsWithLikes.reduce((sum, post) => sum + post.likes, 0);
-        setPosts(postsWithLikes);
-        setSavedPosts(savedPostsWithLikes);
+        
+        // Use double type assertions as recommended by TypeScript
+        setPosts(postsWithLikes as unknown as Post[]);
+        setSavedPosts(savedPostsWithLikes as unknown as Post[]);
         setTotalLikes(totalLikesCount);
       } catch (error) {
         console.error('Hiba a profil és bejegyzések lekérésekor:', (error as Error).message);
@@ -353,10 +435,22 @@ const PersonalProfile = () => {
             console.error('Hiba a kedvelések lekérésekor:', likesError.message);
             return;
           }
-          const newPost = {
-            ...postData,
+          // Create a properly typed Post object
+          const newPost: Post = {
+            id: postData.id,
+            author_id: postData.author_id,
+            content: postData.content,
+            create_at: postData.create_at,
+            media_url: postData.media_url,
             likes: likesData?.length || 0,
             likedBy: likesData?.map((like) => like.user_id) || [],
+            // Use a type assertion to handle the author property correctly
+            author: {
+              id: (postData.author as any).id || '',
+              first_name: (postData.author as any).first_name || '',
+              last_name: (postData.author as any).last_name || '',
+              avatar_url: (postData.author as any).avatar_url || null
+            },
             comments: (postData.comments || []).map((comment: any) => ({
               id: comment.id,
               content: comment.content,
@@ -368,8 +462,8 @@ const PersonalProfile = () => {
             })),
           };
           setSavedPosts((prev) => [newPost, ...prev]);
-        } else if (payload.eventType === 'DELETE') {
-          const oldSave = payload.old;
+        } else if (payload.eventType === 'DELETE' && payload.old) {
+          const oldSave = payload.old as { post_id: string };
           setSavedPosts((prev) => prev.filter((post) => post.id !== oldSave.post_id));
         }
       })
@@ -835,7 +929,7 @@ const PersonalProfile = () => {
         {/* 主内容区 */}
         <div className="lg:w-2/3">
           {/* 选项卡导航 */}
-          <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
+          <div className="flex border-b border-gray-200 mb-6">
             <motion.button
               className={`flex-1 py-3 text-center text-lg font-medium ${
                 activeTab === 'posts' ? 'border-b-4 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'
@@ -858,8 +952,8 @@ const PersonalProfile = () => {
             )}
           </div>
 
-          {/* 帖子列表 */}
-          <div className="space-y-6">
+          {/* 帖子列表 - Most görgethető konténer */}
+          <div className="overflow-y-auto max-h-[calc(100vh-200px)] pr-2 space-y-6 custom-scrollbar">
             {activeTab === 'posts' ? renderPosts(posts) : renderPosts(savedPosts)}
           </div>
         </div>

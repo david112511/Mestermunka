@@ -51,7 +51,7 @@ export const useBooking = () => {
             min_duration: 30,
             max_duration: 120,
             time_step: 15,
-            confirmation_mode: 'auto',
+            confirmation_mode: 'manual',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
@@ -349,10 +349,7 @@ export const useBooking = () => {
       // Meghatározzuk a foglalás státuszát
       const status = trainerSettings?.confirmation_mode === 'auto' ? 'confirmed' : 'pending';
       
-      // Próbáljunk egy másik megközelítést: ne hozzunk létre eseményt, csak foglalást
-      // Hagyjuk, hogy az adatbázis trigger kezelje az esemény létrehozását
-      
-      // 1. Létrehozzuk a foglalást egy tranzakcióban
+      // Létrehozzuk a foglalást
       const { data: appointmentData, error: appointmentError } = await supabase
         .from('appointments')
         .insert([
@@ -374,6 +371,45 @@ export const useBooking = () => {
         // Ha hiba történt, részletesen logoljuk
         console.error('Hiba a foglalás létrehozásakor:', appointmentError);
         throw appointmentError;
+      }
+      
+      // Ha a foglalás automatikusan megerősítésre került, akkor létrehozunk egy értesítést
+      // Megjegyzés: A manuális megerősítésnél a confirmBooking függvényben hozzuk létre az értesítést
+      if (status === 'confirmed') {
+        try {
+          // Értesítés létrehozása az edző számára
+          await supabase
+            .from('notifications')
+            .insert([
+              {
+                user_id: trainerId,
+                type: 'appointment',
+                content: `Új foglalás: ${clientName} - ${service.name} (${format(startDate, 'yyyy. MM. dd. HH:mm')})`,
+                reference_id: appointmentData.id,
+                reference_type: 'appointment',
+                sender_id: user.id,
+                is_read: false
+              }
+            ]);
+            
+          // Értesítés létrehozása a kliens számára
+          await supabase
+            .from('notifications')
+            .insert([
+              {
+                user_id: user.id,
+                type: 'appointment',
+                content: `Foglalásod megerősítve: ${service.name} (${format(startDate, 'yyyy. MM. dd. HH:mm')})`,
+                reference_id: appointmentData.id,
+                reference_type: 'appointment',
+                sender_id: trainerId,
+                is_read: false
+              }
+            ]);
+        } catch (notificationError) {
+          console.error('Hiba az értesítés létrehozásakor:', notificationError);
+          // Nem dobunk hibát, mert a foglalás létrehozása sikeres volt
+        }
       }
       
       toast({
@@ -404,7 +440,7 @@ export const useBooking = () => {
   /**
    * Foglalás lemondása
    */
-  const cancelBooking = useCallback(async (bookingId: string) => {
+  const cancelBooking = useCallback(async (bookingId: string, cancellationReason?: string) => {
     if (!user) {
       toast({
         title: 'Bejelentkezés szükséges',
@@ -418,15 +454,97 @@ export const useBooking = () => {
       setLoading(true);
       setError(null);
       
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: 'cancelled' })
-        .eq('id', bookingId)
-        .eq('client_id', user.id);
+      const now = new Date().toISOString();
       
-      if (error) {
-        throw error;
+      console.log('Foglalás lemondása kezdeményezve:', { bookingId, userId: user.id });
+      
+      // Ellenőrizzük, hogy a bookingId érvényes UUID-e
+      if (!bookingId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bookingId)) {
+        console.error('Érvénytelen foglalás azonosító:', bookingId);
+        throw new Error('Érvénytelen foglalás azonosító');
       }
+      
+      // Először lekérdezzük a foglalás adatait, hogy ellenőrizzük, a felhasználó jogosult-e a lemondásra
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', bookingId)
+        .single();
+      
+      if (bookingError) {
+        console.error('Hiba a foglalás adatainak lekérésekor:', bookingError);
+        throw new Error('Nem sikerült lekérni a foglalás adatait: ' + bookingError.message);
+      }
+      
+      if (!bookingData) {
+        throw new Error('A foglalás nem található');
+      }
+      
+      console.log('Foglalás adatai:', bookingData);
+      
+      // Ellenőrizzük, hogy a foglalás már nincs-e lemondva
+      if (bookingData.status === 'cancelled') {
+        console.error('Állapot hiba: A foglalás már le van mondva');
+        throw new Error('Ez a foglalás már le van mondva');
+      }
+      
+      // Ellenőrizzük, hogy a felhasználó jogosult-e a foglalás lemondására
+      // A felhasználó akkor jogosult, ha ő a kliens vagy az edző
+      if (bookingData.client_id !== user.id && bookingData.trainer_id !== user.id) {
+        console.error('Jogosultsági hiba: A felhasználó sem nem kliens, sem nem edző', {
+          userId: user.id,
+          clientId: bookingData.client_id,
+          trainerId: bookingData.trainer_id
+        });
+        throw new Error('Nincs jogosultságod a foglalás lemondásához');
+      }
+      
+      // Használjuk az új cancel_booking függvényt
+      const { data: cancelResult, error: cancelError } = await supabase
+        .rpc('cancel_booking', { 
+          booking_id: bookingId,
+          reason: cancellationReason || null
+        });
+      
+      if (cancelError) {
+        console.error('Hiba a foglalás lemondásakor:', cancelError);
+        throw cancelError;
+      }
+      
+      if (!cancelResult) {
+        throw new Error('A foglalás lemondása sikertelen volt');
+      }
+      
+      // Töröljük a foglaláshoz kapcsolódó értesítéseket
+      const { error: deleteNotificationsError } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('reference_id', bookingId)
+        .eq('reference_type', 'appointment');
+      
+      if (deleteNotificationsError) {
+        console.warn('Figyelmeztetés: Nem sikerült törölni a foglaláshoz kapcsolódó értesítéseket:', deleteNotificationsError);
+        // Nem dobunk hibát, mert a foglalás lemondása sikeres volt
+      } else {
+        console.log('A foglaláshoz kapcsolódó értesítések sikeresen törölve');
+      }
+      
+      console.log('Foglalás sikeresen lemondva:', { bookingId });
+      
+      // Frissítsük a helyi állapotot is, hogy azonnal látszódjon a változás
+      setBookings(prevBookings => 
+        prevBookings.map(booking => 
+          booking.id === bookingId 
+            ? { 
+                ...booking, 
+                status: 'cancelled',
+                cancellation_date: now,
+                cancellation_reason: cancellationReason || null,
+                updated_at: now
+              } 
+            : booking
+        )
+      );
       
       toast({
         title: 'Foglalás lemondva',
@@ -441,7 +559,7 @@ export const useBooking = () => {
       
       toast({
         title: 'Hiba történt',
-        description: 'Nem sikerült lemondani a foglalást.',
+        description: err instanceof Error ? err.message : 'Nem sikerült lemondani a foglalást.',
         variant: 'destructive',
       });
       
@@ -449,7 +567,7 @@ export const useBooking = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user, toast, setBookings]);
   
   /**
    * Foglalás megerősítése (csak edzők számára)
@@ -468,15 +586,131 @@ export const useBooking = () => {
       setLoading(true);
       setError(null);
       
+      // Először ellenőrizzük, hogy a foglalás létezik-e és a felhasználó jogosult-e a megerősítésre
+      const { data: bookingData, error: fetchError } = await supabase
+        .from('appointments')
+        .select('*, services(*)')
+        .eq('id', bookingId)
+        .single();
+      
+      if (fetchError) {
+        console.error('Hiba a foglalás adatainak lekérésekor:', fetchError);
+        throw new Error('Nem sikerült lekérni a foglalás adatait: ' + fetchError.message);
+      }
+      
+      if (!bookingData) {
+        throw new Error('A foglalás nem található');
+      }
+      
+      // Ellenőrizzük, hogy a felhasználó jogosult-e a megerősítésre (ő-e az edző)
+      if (bookingData.trainer_id !== user.id) {
+        console.error('Jogosultsági hiba: A felhasználó nem az edző', {
+          userId: user.id,
+          trainerId: bookingData.trainer_id
+        });
+        throw new Error('Nincs jogosultságod a foglalás megerősítéséhez');
+      }
+      
+      // Ellenőrizzük, hogy a foglalás függőben van-e
+      if (bookingData.status !== 'pending') {
+        console.error('Állapot hiba: A foglalás nem függőben van', {
+          currentStatus: bookingData.status
+        });
+        throw new Error(`A foglalás nem megerősíthető, mert ${bookingData.status} állapotban van`);
+      }
+      
+      // Megerősítjük a foglalást
       const { error } = await supabase
         .from('appointments')
-        .update({ status: 'confirmed' })
-        .eq('id', bookingId)
-        .eq('trainer_id', user.id);
+        .update({ 
+          status: 'confirmed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bookingId);
       
       if (error) {
+        console.error('Hiba a foglalás megerősítésekor:', error);
         throw error;
       }
+      
+      // Lekérjük a kliens adatait, hogy a nevét használhassuk az értesítésben
+      const { data: clientData, error: clientError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', bookingData.client_id)
+        .single();
+      
+      if (clientError) {
+        console.error('Hiba a kliens adatainak lekérésekor:', clientError);
+        // Nem dobunk hibát, mert a foglalás megerősítése sikeres volt
+      }
+      
+      // Lekérjük a szolgáltatás adatait, ha nem sikerült a join
+      let serviceName = '';
+      if (bookingData.services && bookingData.services.name) {
+        serviceName = bookingData.services.name;
+      } else {
+        const { data: serviceData, error: serviceError } = await supabase
+          .from('services')
+          .select('name')
+          .eq('id', bookingData.service_id)
+          .single();
+        
+        if (serviceError) {
+          console.error('Hiba a szolgáltatás adatainak lekérésekor:', serviceError);
+          // Nem dobunk hibát, mert a foglalás megerősítése sikeres volt
+        } else if (serviceData) {
+          serviceName = serviceData.name;
+        }
+      }
+      
+      // Létrehozzuk az értesítéseket a foglalás megerősítéséről
+      try {
+        const startDate = parseISO(bookingData.start_time);
+        const clientName = clientData ? `${clientData.first_name} ${clientData.last_name}` : 'Kliens';
+        
+        // Értesítés létrehozása az edző számára
+        await supabase
+          .from('notifications')
+          .insert([
+            {
+              user_id: user.id, // Az edző kap értesítést
+              type: 'appointment',
+              content: `Megerősítetted a foglalást: ${clientName} - ${serviceName} (${format(startDate, 'yyyy. MM. dd. HH:mm')})`,
+              reference_id: bookingId,
+              reference_type: 'appointment',
+              sender_id: user.id, // Saját maga küldi
+              is_read: false
+            }
+          ]);
+          
+        // Értesítés létrehozása a kliens számára
+        await supabase
+          .from('notifications')
+          .insert([
+            {
+              user_id: bookingData.client_id, // A kliens kap értesítést
+              type: 'appointment',
+              content: `Foglalásod megerősítve: ${serviceName} (${format(startDate, 'yyyy. MM. dd. HH:mm')})`,
+              reference_id: bookingId,
+              reference_type: 'appointment',
+              sender_id: user.id, // Az edző küldi
+              is_read: false
+            }
+          ]);
+      } catch (notificationError) {
+        console.error('Hiba az értesítés létrehozásakor:', notificationError);
+        // Nem dobunk hibát, mert a foglalás megerősítése sikeres volt
+      }
+      
+      // Frissítjük a helyi állapotot
+      setBookings(prev => 
+        prev.map(booking => 
+          booking.id === bookingId 
+            ? { ...booking, status: 'confirmed', updated_at: new Date().toISOString() } 
+            : booking
+        )
+      );
       
       toast({
         title: 'Foglalás megerősítve',
@@ -491,7 +725,7 @@ export const useBooking = () => {
       
       toast({
         title: 'Hiba történt',
-        description: 'Nem sikerült megerősíteni a foglalást.',
+        description: err instanceof Error ? err.message : 'Nem sikerült megerősíteni a foglalást.',
         variant: 'destructive',
       });
       
@@ -499,7 +733,7 @@ export const useBooking = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user, toast, setBookings]);
   
   /**
    * Feliratkozás a foglalások változásaira
